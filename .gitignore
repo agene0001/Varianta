@@ -2,6 +2,16 @@
 dist/
 *.tsbuildinfo
 
+# Rust / Cargo (workspace target at repo root)
+/target/
+# Machine-local Cargo config (sets target-dir to the shared /Volumes/Build image)
+/.cargo/
+# Tauri-generated schemas
+src-tauri/gen/schemas
+
+# macOS AppleDouble files (common on exFAT external drives)
+._*
+
 # Dependencies
 node_modules/
 
