@@ -1,3 +1,5 @@
+use gambit_core::Game;
+use gambit_ingest::ChessComClient;
 use tauri::{Manager, State};
 use varianta_storage::{Line, Opening, Store, StoredUserLines};
 
@@ -33,6 +35,24 @@ async fn import_legacy_db(bytes: Vec<u8>) -> Result<StoredUserLines, String> {
         .map_err(|e| e.to_string())
 }
 
+/// Fetch a Chess.com player's full game history, store new games, and return the
+/// full stored list (most recent first).
+#[tauri::command]
+async fn import_games(store: State<'_, Store>, username: String) -> Result<Vec<Game>, String> {
+    let client = ChessComClient::new().map_err(|e| e.to_string())?;
+    let games = client
+        .fetch_all_games(&username)
+        .await
+        .map_err(|e| e.to_string())?;
+    store.save_games(&games).await.map_err(|e| e.to_string())?;
+    store.list_games().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn list_games(store: State<'_, Store>) -> Result<Vec<Game>, String> {
+    store.list_games().await.map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -62,7 +82,9 @@ pub fn run() {
             get_user_lines,
             add_line,
             add_opening,
-            import_legacy_db
+            import_legacy_db,
+            import_games,
+            list_games
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

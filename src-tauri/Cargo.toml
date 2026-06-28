@@ -24,3 +24,5 @@ log = "0.4.33"
 tauri = { version = "2.11.3", features = [] }
 tauri-plugin-log = "2"
 varianta-storage = { path = "../crates/varianta-storage" }
+gambit-core = { path = "../crates/gambit-core" }
+gambit-ingest = { path = "../crates/gambit-ingest" }

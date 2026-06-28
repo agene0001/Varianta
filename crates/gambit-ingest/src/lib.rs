@@ -12,6 +12,8 @@ use serde::Deserialize;
 pub enum IngestError {
     #[error("failed to parse archive JSON: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("http error: {0}")]
+    Http(#[from] reqwest::Error),
 }
 
 // ---- Chess.com monthly-archive JSON (only the fields we consume) ----
@@ -94,6 +96,66 @@ fn is_draw(code: &str) -> bool {
         code,
         "agreed" | "repetition" | "stalemate" | "insufficient" | "50move" | "timevsinsufficient"
     )
+}
+
+/// HTTP client for the Chess.com public API (no authentication required).
+///
+/// Chess.com rejects requests without a User-Agent, so one is always set.
+pub struct ChessComClient {
+    http: reqwest::Client,
+}
+
+impl ChessComClient {
+    pub fn new() -> Result<Self, IngestError> {
+        let http = reqwest::Client::builder()
+            .user_agent(concat!("varianta/", env!("CARGO_PKG_VERSION")))
+            .build()?;
+        Ok(Self { http })
+    }
+
+    /// List a player's monthly archive URLs (oldest → newest).
+    pub async fn list_archives(&self, username: &str) -> Result<Vec<String>, IngestError> {
+        let url = format!(
+            "https://api.chess.com/pub/player/{}/games/archives",
+            username.to_lowercase()
+        );
+        let list: ArchivesList = self
+            .http
+            .get(url)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        Ok(list.archives)
+    }
+
+    /// Fetch and normalize every game in a player's history.
+    ///
+    /// One request per monthly archive — for very active players this can be many
+    /// months; callers may want to bound it (a `since` filter lands with
+    /// continuous sync).
+    pub async fn fetch_all_games(&self, username: &str) -> Result<Vec<Game>, IngestError> {
+        let archives = self.list_archives(username).await?;
+        let mut all = Vec::new();
+        for archive_url in archives {
+            let body = self
+                .http
+                .get(&archive_url)
+                .send()
+                .await?
+                .error_for_status()?
+                .text()
+                .await?;
+            all.extend(parse_chesscom_archive(&body, username)?);
+        }
+        Ok(all)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct ArchivesList {
+    archives: Vec<String>,
 }
 
 #[cfg(test)]

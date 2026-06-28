@@ -15,8 +15,10 @@ dbkit-rs = { version="0.4.1", default-features = false, features = ["sqlite"] }
 # Direct sqlx dep (same 0.9 as dbkit) so the `Row` trait is in scope to read
 # columns off the `AnyRow`s that dbkit returns. Features union with dbkit's.
 sqlx = { version = "0.9", default-features = false, features = ["any"] }
+gambit-core = { path = "../gambit-core" }
 serde.workspace = true
 serde_json.workspace = true
+chrono.workspace = true
 thiserror = "2"
 
 [dev-dependencies]

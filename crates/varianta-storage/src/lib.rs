@@ -8,7 +8,9 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+use chrono::{DateTime, Utc};
 use dbkit::{BaseHandler, ConnectionManager, FetchMode, WriteOp};
+use gambit_core::{Color, Game, GameId, GameResult, GameSource};
 use serde::{Deserialize, Serialize};
 use sqlx::Row; // brings `try_get` into scope for the `AnyRow`s dbkit returns
 
@@ -97,6 +99,17 @@ impl Store {
                         name TEXT NOT NULL,
                         description TEXT DEFAULT '',
                         moves_json TEXT NOT NULL
+                    )",
+                    // Gambit: imported games.
+                    "CREATE TABLE IF NOT EXISTS games (
+                        id TEXT PRIMARY KEY,
+                        source TEXT NOT NULL,
+                        pgn TEXT NOT NULL,
+                        white TEXT NOT NULL,
+                        black TEXT NOT NULL,
+                        player_color TEXT NOT NULL,
+                        result TEXT NOT NULL,
+                        played_at TEXT NOT NULL
                     )",
                 ],
             })
@@ -221,6 +234,124 @@ impl Store {
 
         Ok(result)
     }
+
+    // ==================== Games (Gambit) ====================
+
+    /// Insert games, skipping any already stored (dedup by id). Chess.com
+    /// re-imports overlap by design, so `INSERT OR IGNORE` is the right behavior.
+    pub async fn save_games(&self, games: &[Game]) -> Result<(), StorageError> {
+        if games.is_empty() {
+            return Ok(());
+        }
+        let params_list = games
+            .iter()
+            .map(|g| {
+                vec![
+                    g.id.0.clone().into(),
+                    game_source_str(g.source).into(),
+                    g.pgn.clone().into(),
+                    g.white.clone().into(),
+                    g.black.clone().into(),
+                    color_str(g.player_color).into(),
+                    game_result_str(g.result).into(),
+                    g.played_at.to_rfc3339().into(),
+                ]
+            })
+            .collect();
+        self.handler
+            .execute_write(WriteOp::BatchParams {
+                query: "INSERT OR IGNORE INTO games \
+                        (id, source, pgn, white, black, player_color, result, played_at) \
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                params_list,
+                // Skip a malformed row rather than aborting the whole import.
+                isolate_rows: true,
+            })
+            .await?;
+        Ok(())
+    }
+
+    /// All stored games, most recent first.
+    pub async fn list_games(&self) -> Result<Vec<Game>, StorageError> {
+        let rows = self
+            .handler
+            .execute_write(WriteOp::Single {
+                query: "SELECT id, source, pgn, white, black, player_color, result, played_at \
+                        FROM games ORDER BY played_at DESC",
+                params: vec![],
+                mode: FetchMode::All,
+            })
+            .await?
+            .all()?;
+
+        let mut games = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let played_at: String = row.try_get(7)?;
+            games.push(Game {
+                id: GameId(row.try_get::<String, _>(0)?),
+                source: parse_source(&row.try_get::<String, _>(1)?),
+                pgn: row.try_get(2)?,
+                white: row.try_get(3)?,
+                black: row.try_get(4)?,
+                player_color: parse_color(&row.try_get::<String, _>(5)?),
+                result: parse_result(&row.try_get::<String, _>(6)?),
+                played_at: DateTime::parse_from_rfc3339(&played_at)
+                    .map(|d| d.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now()),
+            });
+        }
+        Ok(games)
+    }
+}
+
+// ---- enum <-> stored string mappings (match the serde reprs in gambit-core) ----
+
+fn color_str(c: Color) -> &'static str {
+    match c {
+        Color::White => "white",
+        Color::Black => "black",
+    }
+}
+
+fn parse_color(s: &str) -> Color {
+    match s {
+        "black" => Color::Black,
+        _ => Color::White,
+    }
+}
+
+fn game_source_str(s: GameSource) -> &'static str {
+    match s {
+        GameSource::ChessCom => "chess_com",
+        GameSource::Lichess => "lichess",
+        GameSource::ManualPgn => "manual_pgn",
+    }
+}
+
+fn parse_source(s: &str) -> GameSource {
+    match s {
+        "lichess" => GameSource::Lichess,
+        "manual_pgn" => GameSource::ManualPgn,
+        _ => GameSource::ChessCom,
+    }
+}
+
+fn game_result_str(r: GameResult) -> &'static str {
+    match r {
+        GameResult::WhiteWin => "white_win",
+        GameResult::BlackWin => "black_win",
+        GameResult::Draw => "draw",
+        GameResult::Unknown => "unknown",
+    }
+}
+
+fn parse_result(s: &str) -> GameResult {
+    match s {
+        "white_win" => GameResult::WhiteWin,
+        "black_win" => GameResult::BlackWin,
+        "draw" => GameResult::Draw,
+        _ => GameResult::Unknown,
+    }
 }
 
 /// Read a legacy sql.js SQLite database (raw file bytes, identical schema) into
@@ -287,6 +418,36 @@ mod tests {
         assert_eq!(loaded.new_openings.len(), 1);
         assert_eq!(loaded.new_openings[0].id, "user-london");
         assert_eq!(loaded.new_openings[0].lines.len(), 1);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn games_round_trip() {
+        let dir =
+            std::env::temp_dir().join(format!("varianta-games-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = Store::open(&dir.join("g.db")).await.unwrap();
+
+        let g = Game {
+            id: GameId("https://chess.com/game/1".into()),
+            source: GameSource::ChessCom,
+            pgn: "1. e4 e5 *".into(),
+            white: "alice".into(),
+            black: "bob".into(),
+            player_color: Color::White,
+            result: GameResult::WhiteWin,
+            played_at: Utc::now(),
+        };
+        // Saving the same id twice must not duplicate (INSERT OR IGNORE).
+        store.save_games(std::slice::from_ref(&g)).await.unwrap();
+        store.save_games(std::slice::from_ref(&g)).await.unwrap();
+
+        let games = store.list_games().await.unwrap();
+        assert_eq!(games.len(), 1);
+        assert_eq!(games[0].id, g.id);
+        assert_eq!(games[0].result, GameResult::WhiteWin);
+        assert_eq!(games[0].opponent(), "bob");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
