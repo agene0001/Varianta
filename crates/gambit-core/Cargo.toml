@@ -1,0 +1,12 @@
+[package]
+name = "gambit-core"
+version = "0.1.0"
+description = "Gambit domain types: games, positions, results"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+chrono.workspace = true

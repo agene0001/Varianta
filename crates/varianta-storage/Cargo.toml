@@ -1,0 +1,23 @@
+[package]
+name = "varianta-storage"
+version = "0.1.0"
+description = "Varianta local SQLite persistence (repertoire lines) on dbkit-rs"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Local path dep while dbkit-rs is under active development; pin to the
+# published version later. SQLite-only — drop the default `postgres` feature so
+# the desktop build doesn't pull in a Postgres driver.
+dbkit-rs = { version="0.4.1", default-features = false, features = ["sqlite"] }
+# Direct sqlx dep (same 0.9 as dbkit) so the `Row` trait is in scope to read
+# columns off the `AnyRow`s that dbkit returns. Features union with dbkit's.
+sqlx = { version = "0.9", default-features = false, features = ["any"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror = "2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros"] }

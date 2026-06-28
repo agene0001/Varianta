@@ -2,8 +2,10 @@
 resolver = "2"
 members = [
     "src-tauri",
-    # Gambit backend crates land here, e.g. "crates/gambit-core", "crates/gambit-engine".
-    # "crates/*",
+    "crates/varianta-storage",
+    # Gambit (game import + analysis) crates:
+    "crates/gambit-core",
+    "crates/gambit-ingest",
 ]
 
 [workspace.package]
@@ -17,3 +19,5 @@ rust-version = "1.85"
 [workspace.dependencies]
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2"

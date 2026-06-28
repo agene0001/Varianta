@@ -1,6 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore - sql.js has no types
-import initSqlJs from "sql.js";
+import { invoke } from "@tauri-apps/api/core";
 import type { Opening, Line } from "../types/chess";
 import {
   parsePgnFile,
@@ -8,195 +6,33 @@ import {
   isBuiltInOpeningId,
 } from "../utils/pgnParser";
 
-const IDB_NAME = "chessreps-db";
-const IDB_STORE = "sqlite";
+// Persistence now lives in the Rust backend (crate `varianta-storage`, native
+// SQLite). The frontend reaches it via Tauri commands. When running in a plain
+// browser (`bun run dev`, no Tauri), `invoke` is unavailable, so we degrade
+// gracefully: reads return empty, writes are no-ops. The desktop app is the
+// real target.
+const inTauri =
+  typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 export interface StoredUserLines {
   linesByOpening: Record<string, Line[]>;
   newOpenings: Opening[];
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let db: any = null;
-let initPromise: Promise<void> | null = null;
+const empty = (): StoredUserLines => ({ linesByOpening: {}, newOpenings: [] });
 
-/** Initialize SQLite (load WASM, create/load DB from IndexedDB). Call once on app mount. */
+/**
+ * No-op: the SQLite database is opened by the Rust backend at app startup
+ * (`src-tauri` `setup()`). Kept for API compatibility with callers.
+ */
 export async function initUserLinesDb(): Promise<void> {
-  if (initPromise) return initPromise;
-
-  initPromise = (async () => {
-    const SQL = await initSqlJs({
-      // Load from our own /public so we don't depend on sql.js.org's CDN
-      // (which currently 404s on these wasm paths).
-      locateFile: (file: string) => `/${file}`,
-    });
-
-    const saved = await loadFromIndexedDB();
-    db = saved ? new SQL.Database(saved) : new SQL.Database();
-
-    db.run(`
-      CREATE TABLE IF NOT EXISTS user_openings (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        description TEXT DEFAULT ''
-      )
-    `);
-    db.run(`
-      CREATE TABLE IF NOT EXISTS user_lines (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        opening_id TEXT NOT NULL,
-        name TEXT NOT NULL,
-        description TEXT DEFAULT '',
-        moves_json TEXT NOT NULL
-      )
-    `);
-
-    if (!saved) {
-      await migrateFromLocalStorage();
-    }
-  })();
-
-  return initPromise;
+  // nothing to do — native DB is initialized in the backend
 }
 
-async function loadFromIndexedDB(): Promise<Uint8Array | null> {
-  return new Promise((resolve) => {
-    const req = indexedDB.open(IDB_NAME, 1);
-    req.onerror = () => resolve(null);
-    req.onsuccess = () => {
-      const idb = req.result;
-      if (!idb.objectStoreNames.contains(IDB_STORE)) {
-        idb.close();
-        resolve(null);
-        return;
-      }
-      const tx = idb.transaction(IDB_STORE, "readonly");
-      const store = tx.objectStore(IDB_STORE);
-      const getReq = store.get("db");
-      getReq.onsuccess = () => resolve(getReq.result ?? null);
-      getReq.onerror = () => resolve(null);
-      tx.oncomplete = () => idb.close();
-    };
-    req.onupgradeneeded = (e) => {
-      (e.target as IDBOpenDBRequest).result.createObjectStore(IDB_STORE);
-    };
-  });
-}
-
-async function saveToIndexedDB(): Promise<void> {
-  if (!db) return;
-  const data = db.export();
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(IDB_NAME, 1);
-    req.onerror = () => reject(req.error);
-    req.onsuccess = () => {
-      const idb = req.result;
-      const tx = idb.transaction(IDB_STORE, "readwrite");
-      tx.objectStore(IDB_STORE).put(data, "db");
-      tx.oncomplete = () => {
-        idb.close();
-        resolve();
-      };
-      tx.onerror = () => reject(tx.error);
-    };
-    req.onupgradeneeded = (e) => {
-      (e.target as IDBOpenDBRequest).result.createObjectStore(IDB_STORE);
-    };
-  });
-}
-
-/** Migrate legacy localStorage data into SQLite (one-time). */
-async function migrateFromLocalStorage(): Promise<void> {
-  try {
-    const raw = localStorage.getItem("chessreps-user-lines");
-    if (!raw) return;
-    const data = JSON.parse(raw) as StoredUserLines;
-    for (const [openingId, lines] of Object.entries(data.linesByOpening)) {
-      for (const line of lines) {
-        insertLine(openingId, line);
-      }
-    }
-    for (const opening of data.newOpenings) {
-      db!.run(
-        "INSERT OR IGNORE INTO user_openings (id, name, description) VALUES (?, ?, ?)",
-        [opening.id, opening.name, opening.description]
-      );
-      for (const line of opening.lines) {
-        insertLine(opening.id, line);
-      }
-    }
-    localStorage.removeItem("chessreps-user-lines");
-    await saveToIndexedDB();
-  } catch {
-    // ignore migration errors
-  }
-}
-
-function insertLine(openingId: string, line: Line): void {
-  db!.run(
-    "INSERT INTO user_lines (opening_id, name, description, moves_json) VALUES (?, ?, ?, ?)",
-    [openingId, line.name, line.description ?? "", JSON.stringify(line.moves)]
-  );
-}
-
-function ensureDb() {
-  if (!db) throw new Error("Database not initialized. Call initUserLinesDb() first.");
-  return db;
-}
-
-/** Load all user lines from the database. */
-export function loadUserLines(): StoredUserLines {
-  const database = ensureDb();
-  const result: StoredUserLines = { linesByOpening: {}, newOpenings: [] };
-  const linesByUserOpening: Record<string, Line[]> = {};
-
-  const userOpeningIds = new Set<string>();
-  const openRows = database.exec("SELECT id FROM user_openings");
-  if (openRows.length > 0 && openRows[0].values) {
-    for (const row of openRows[0].values) {
-      userOpeningIds.add(row[0] as string);
-    }
-  }
-
-  const lineRows = database.exec(
-    "SELECT opening_id, name, description, moves_json FROM user_lines ORDER BY id"
-  );
-  if (lineRows.length > 0 && lineRows[0].values) {
-    for (const row of lineRows[0].values) {
-      const [openingId, name, description, movesJson] = row;
-      const line: Line = {
-        name: name as string,
-        description: (description as string) || "",
-        moves: JSON.parse(movesJson as string),
-      };
-      if (userOpeningIds.has(openingId as string)) {
-        linesByUserOpening[openingId as string] =
-          linesByUserOpening[openingId as string] ?? [];
-        linesByUserOpening[openingId as string].push(line);
-      } else {
-        result.linesByOpening[openingId as string] =
-          result.linesByOpening[openingId as string] ?? [];
-        result.linesByOpening[openingId as string].push(line);
-      }
-    }
-  }
-
-  const openInfo = database.exec(
-    "SELECT id, name, description FROM user_openings"
-  );
-  if (openInfo.length > 0 && openInfo[0].values) {
-    for (const row of openInfo[0].values) {
-      const [id, name, description] = row;
-      result.newOpenings.push({
-        id: id as string,
-        name: name as string,
-        description: (description as string) || "",
-        lines: linesByUserOpening[id as string] ?? [],
-      });
-    }
-  }
-
-  return result;
+/** Load all user lines from the native database. */
+export async function loadUserLines(): Promise<StoredUserLines> {
+  if (!inTauri) return empty();
+  return await invoke<StoredUserLines>("get_user_lines");
 }
 
 /** Merge file-based openings with user lines from the database. */
@@ -216,20 +52,14 @@ export async function addLineToExistingOpening(
   openingId: string,
   line: Line
 ): Promise<void> {
-  ensureDb();
-  insertLine(openingId, line);
-  await saveToIndexedDB();
+  if (!inTauri) return;
+  await invoke("add_line", { openingId, line });
 }
 
-/** Add a new user-created opening with its first line. */
+/** Add a new user-created opening with its first line(s). */
 export async function addNewOpening(opening: Opening): Promise<void> {
-  const database = ensureDb();
-  database.run(
-    "INSERT INTO user_openings (id, name, description) VALUES (?, ?, ?)",
-    [opening.id, opening.name, opening.description]
-  );
-  for (const line of opening.lines) insertLine(opening.id, line);
-  await saveToIndexedDB();
+  if (!inTauri) return;
+  await invoke("add_opening", { opening });
 }
 
 /** Add a line to an existing user-created opening. */
@@ -237,16 +67,15 @@ export async function addLineToNewOpening(
   openingId: string,
   line: Line
 ): Promise<void> {
-  ensureDb();
-  insertLine(openingId, line);
-  await saveToIndexedDB();
+  if (!inTauri) return;
+  await invoke("add_line", { openingId, line });
 }
 
 /** Export user lines as JSON and trigger download. */
-export function exportUserLinesAsFile(
-  filename = "chessreps-user-lines.json"
-): { success: boolean; message: string } {
-  const data = loadUserLines();
+export async function exportUserLinesAsFile(
+  filename = "varianta-user-lines.json"
+): Promise<{ success: boolean; message: string }> {
+  const data = await loadUserLines();
   const hasAny =
     Object.keys(data.linesByOpening).length > 0 || data.newOpenings.length > 0;
   if (!hasAny) {
@@ -295,86 +124,126 @@ function pgnResultsToStoredUserLines(
   return { linesByOpening, newOpenings };
 }
 
-/** Import user lines from JSON or PGN (Chess.com format). Merges with existing (skips duplicates by move sequence). */
-export async function importUserLinesFromFile(file: File): Promise<{
-  success: boolean;
-  message: string;
-  imported: { lines: number; openings: number };
-}> {
-  ensureDb();
-  const text = await file.text();
-  let data: StoredUserLines;
-
-  if (text.trim().startsWith("{")) {
-    try {
-      data = JSON.parse(text) as StoredUserLines;
-    } catch {
-      return {
-        success: false,
-        message: "Invalid JSON file.",
-        imported: { lines: 0, openings: 0 },
-      };
-    }
-  } else {
-    const pgnResults = parsePgnFile(text);
-    if (pgnResults.length === 0) {
-      return {
-        success: false,
-        message: "No valid PGN found. Expected Chess.com format with [Opening \"...\"] and moves.",
-        imported: { lines: 0, openings: 0 },
-      };
-    }
-    data = pgnResultsToStoredUserLines(pgnResults);
+/** SQLite files begin with the 16-byte magic string "SQLite format 3\0". */
+async function looksLikeSqlite(file: File): Promise<boolean> {
+  const magic = "SQLite format 3\0";
+  const head = new Uint8Array(await file.slice(0, magic.length).arrayBuffer());
+  if (head.length < magic.length) return false;
+  for (let i = 0; i < magic.length; i++) {
+    if (head[i] !== magic.charCodeAt(i)) return false;
   }
+  return true;
+}
 
-  const existing = loadUserLines();
+/** Merge a StoredUserLines into the store, skipping duplicate lines by SAN sequence. */
+async function importStoredUserLines(
+  data: StoredUserLines
+): Promise<{ lines: number; openings: number }> {
+  const existing = await loadUserLines();
   const existingSequences = new Set<string>();
   for (const lines of Object.values(existing.linesByOpening)) {
-    for (const l of lines) {
-      existingSequences.add(l.moves.map((m) => m.san).join(" "));
-    }
+    for (const l of lines) existingSequences.add(l.moves.map((m) => m.san).join(" "));
   }
   for (const o of existing.newOpenings) {
-    for (const l of o.lines) {
-      existingSequences.add(l.moves.map((m) => m.san).join(" "));
-    }
+    for (const l of o.lines) existingSequences.add(l.moves.map((m) => m.san).join(" "));
   }
 
-  let linesAdded = 0;
-  let openingsAdded = 0;
+  let lines = 0;
+  let openings = 0;
 
-  for (const [openingId, lines] of Object.entries(data.linesByOpening ?? {})) {
-    for (const line of lines) {
+  for (const [openingId, ls] of Object.entries(data.linesByOpening ?? {})) {
+    for (const line of ls) {
       const seq = line.moves.map((m) => m.san).join(" ");
       if (existingSequences.has(seq)) continue;
-      insertLine(openingId, line);
+      await addLineToExistingOpening(openingId, line);
       existingSequences.add(seq);
-      linesAdded++;
+      lines++;
     }
   }
 
   for (const opening of data.newOpenings ?? []) {
     const exists = existing.newOpenings.some((o) => o.id === opening.id);
-    if (!exists) {
-      db!.run(
-        "INSERT OR IGNORE INTO user_openings (id, name, description) VALUES (?, ?, ?)",
-        [opening.id, opening.name, opening.description]
-      );
-      openingsAdded++;
-    }
+    const nonDupLines: Line[] = [];
     for (const line of opening.lines) {
       const seq = line.moves.map((m) => m.san).join(" ");
       if (existingSequences.has(seq)) continue;
-      insertLine(opening.id, line);
+      nonDupLines.push(line);
       existingSequences.add(seq);
-      linesAdded++;
+      lines++;
+    }
+    if (!exists) openings++;
+    // `add_opening` does INSERT OR IGNORE on the opening row, then inserts the
+    // given lines — so this handles both "new opening" and "existing opening,
+    // new lines" with the duplicate lines already filtered out.
+    if (!exists || nonDupLines.length > 0) {
+      await addNewOpening({ ...opening, lines: nonDupLines });
     }
   }
 
-  await saveToIndexedDB();
+  return { lines, openings };
+}
+
+/**
+ * Import user lines from JSON, PGN (Chess.com format), or a legacy `.sqlite`
+ * database exported from the old browser app. Merges with existing data,
+ * skipping duplicate lines by move sequence.
+ */
+export async function importUserLinesFromFile(file: File): Promise<{
+  success: boolean;
+  message: string;
+  imported: { lines: number; openings: number };
+}> {
+  let data: StoredUserLines;
+
+  if (await looksLikeSqlite(file)) {
+    // Legacy sql.js database (the migration path from the old browser storage).
+    if (!inTauri) {
+      return {
+        success: false,
+        message: "Importing a .sqlite database requires the desktop app.",
+        imported: { lines: 0, openings: 0 },
+      };
+    }
+    const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
+    try {
+      data = await invoke<StoredUserLines>("import_legacy_db", { bytes });
+    } catch (e) {
+      return {
+        success: false,
+        message: `Could not read database file: ${e}`,
+        imported: { lines: 0, openings: 0 },
+      };
+    }
+  } else {
+    const text = await file.text();
+    if (text.trim().startsWith("{")) {
+      try {
+        data = JSON.parse(text) as StoredUserLines;
+      } catch {
+        return {
+          success: false,
+          message: "Invalid JSON file.",
+          imported: { lines: 0, openings: 0 },
+        };
+      }
+    } else {
+      const pgnResults = parsePgnFile(text);
+      if (pgnResults.length === 0) {
+        return {
+          success: false,
+          message:
+            "No valid PGN found. Expected Chess.com format with [Opening \"...\"] and moves.",
+          imported: { lines: 0, openings: 0 },
+        };
+      }
+      data = pgnResultsToStoredUserLines(pgnResults);
+    }
+  }
+
+  const { lines, openings } = await importStoredUserLines(data);
   return {
     success: true,
-    message: `Imported ${linesAdded} lines and ${openingsAdded} new openings.`,
-    imported: { lines: linesAdded, openings: openingsAdded },
+    message: `Imported ${lines} lines and ${openings} new openings.`,
+    imported: { lines, openings },
   };
 }

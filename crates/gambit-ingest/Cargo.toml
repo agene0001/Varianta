@@ -1,0 +1,15 @@
+[package]
+name = "gambit-ingest"
+version = "0.1.0"
+description = "Gambit game ingestion: Chess.com / Lichess / PGN → core games"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+gambit-core = { path = "../gambit-core" }
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
