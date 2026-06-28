@@ -1,5 +1,25 @@
 <template>
   <div class="app">
+    <nav class="section-nav">
+      <button
+        class="section-tab"
+        :class="{ active: section === 'trainer' }"
+        @click="section = 'trainer'"
+      >
+        Trainer
+      </button>
+      <button
+        class="section-tab"
+        :class="{ active: section === 'games' }"
+        @click="section = 'games'"
+      >
+        Games
+      </button>
+    </nav>
+
+    <GamesView v-if="section === 'games'" />
+
+    <template v-else>
     <!-- Home screen: openings grid -->
     <div v-if="!selectedOpening" class="home-screen">
         <header class="home-header">
@@ -8,7 +28,7 @@
              <label class="import-label">
                <input
                  type="file"
-                 accept=".json,application/json,.pgn"
+                 accept=".json,application/json,.pgn,.sqlite,.db"
                  class="import-input"
                  @change="onImportFile"
                >
@@ -39,6 +59,11 @@
           class="opening-card"
           @click="selectOpening(opening)"
         >
+          <MiniBoard
+            class="opening-board"
+            :fen="previews[opening.id]?.fen ?? ''"
+            :orientation="previews[opening.id]?.orientation ?? 'white'"
+          />
           <h2 class="opening-name">{{ opening.name }}</h2>
           <p class="opening-description">{{ opening.description }}</p>
           <div class="opening-stats">
@@ -128,13 +153,16 @@
       @close="showImporter = false"
       @line-imported="onLineImported"
     />
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted } from 'vue';
+import { Chess } from 'chess.js';
 import ChessBoard from './components/ChessBoard.vue';
 import Sidebar from './components/UI/Sidebar.vue';
+import MiniBoard from './components/UI/MiniBoard.vue';
 import { openingsData } from './data/openingsTree';
 import { useChessGame } from './composables/useChessGame';
 import {
@@ -150,7 +178,9 @@ import {
 import type { Opening, Line } from './types/chess';
 import LineCreator from './components/LineCreator.vue';
 import LichessImporter from './components/LichessImporter.vue';
+import GamesView from './components/GamesView.vue';
 
+const section = ref<'trainer' | 'games'>('trainer');
 const showLineCreator = ref(false);
 const showImporter = ref(false);
 const feedbackMessage = ref('');
@@ -168,7 +198,7 @@ onMounted(async () => {
       initUserLinesDb(),
       new Promise((_, reject) => setTimeout(() => reject(new Error('Database init timeout')), DB_TIMEOUT)),
     ]);
-    openings.value = mergeUserLines(openingsData, loadUserLines());
+    openings.value = mergeUserLines(openingsData, await loadUserLines());
   } catch (e) {
     // DB init failed or timed out — still show built-in openings
     console.warn('Database init failed, using built-in openings only:', e);
@@ -195,13 +225,13 @@ const onLineSaved = async (payload: {
   if (newOpening) {
     const fresh: Opening = { ...newOpening, lines: [line] };
     await addNewOpening(fresh);
-    openings.value = mergeUserLines(openingsData, loadUserLines());
+    openings.value = mergeUserLines(openingsData, await loadUserLines());
     selectedOpening.value = fresh;
     currentLineIndex.value = 0;
   } else {
     const target = openings.value.find((o) => o.id === openingId);
     if (target) {
-      const stored = loadUserLines();
+      const stored = await loadUserLines();
       const isUserCreated = stored.newOpenings.some((o) => o.id === openingId);
       if (isUserCreated) {
         await addLineToNewOpening(openingId, line);
@@ -209,7 +239,7 @@ const onLineSaved = async (payload: {
         await addLineToExistingOpening(openingId, line);
         target.lines.push(line);
       }
-      openings.value = mergeUserLines(openingsData, loadUserLines());
+      openings.value = mergeUserLines(openingsData, await loadUserLines());
       if (selectedOpening.value?.id === openingId) {
         const updated = openings.value.find((o) => o.id === openingId);
         if (updated) selectedOpening.value = updated;
@@ -238,8 +268,8 @@ const onLineImported = async (payload: {
   showFeedback(`Imported "${payload.line.name}".`, false);
 };
 
-const onExport = () => {
-  const result = exportUserLinesAsFile();
+const onExport = async () => {
+  const result = await exportUserLinesAsFile();
   showFeedback(result.message, !result.success);
 };
 
@@ -251,13 +281,13 @@ const onImportFile = async (e: Event) => {
   const result = await importUserLinesFromFile(file);
   showFeedback(result.message, !result.success);
   if (result.success && (result.imported.lines > 0 || result.imported.openings > 0)) {
-    openings.value = mergeUserLines(openingsData, loadUserLines());
+    openings.value = mergeUserLines(openingsData, await loadUserLines());
   }
 };
 const selectedOpening = ref<Opening | null>(null);
 const currentLineIndex = ref(0);
 
-const BUILT_IN_WHITE_OPENINGS = ['italian-game', 'ruy-lopez', 'queens-gambit', 'english-opening', 'catalan-opening'];
+const BUILT_IN_WHITE_OPENINGS = ['italian-game', 'ruy-lopez', 'queens-gambit', 'english-opening', 'catalan-opening', 'bishops-opening'];
 
 function getOpeningColor(openingId: string): 'white' | 'black' {
   if (BUILT_IN_WHITE_OPENINGS.includes(openingId)) return 'white';
@@ -272,6 +302,21 @@ const userWhiteOpeningIds = computed(() =>
 const userColor = computed<'white' | 'black'>(() => {
   if (!selectedOpening.value) return 'white';
   return getOpeningColor(selectedOpening.value.id);
+});
+
+// A representative board position per opening for the home-screen previews:
+// play the first line a few moves deep, viewed from the side you study it as.
+const previews = computed<Record<string, { fen: string; orientation: 'white' | 'black' }>>(() => {
+  const out: Record<string, { fen: string; orientation: 'white' | 'black' }> = {};
+  for (const o of openings.value) {
+    const chess = new Chess();
+    const moves = o.lines[0]?.moves ?? [];
+    for (const step of moves.slice(0, 12)) {
+      try { chess.move(step.san); } catch { break; }
+    }
+    out[o.id] = { fen: chess.fen(), orientation: getOpeningColor(o.id) };
+  }
+  return out;
 });
 
 const {
@@ -618,6 +663,17 @@ watch(currentLineIndex, () => {
   opacity: 1;
 }
 
+.opening-board {
+  width: 100%;
+  max-width: 270px;
+  margin: 0 auto 1rem;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.opening-card:hover .opening-board {
+  box-shadow: 0 0 22px rgba(0, 245, 184, 0.22);
+}
+
 .opening-name {
   font-family: "Outfit", "Inter", system-ui, sans-serif;
   font-size: 1.15rem;
@@ -918,6 +974,30 @@ watch(currentLineIndex, () => {
   border-color: var(--accent-blue);
   color: #fff;
   box-shadow: 0 0 14px rgba(0, 180, 255, 0.28);
+}
+
+/* Top-level section nav (Trainer | Games) */
+.section-nav {
+  display: flex;
+  gap: 4px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-elevated);
+}
+
+.section-tab {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  font-weight: 600;
+  padding: 6px 16px;
+  border-radius: 8px;
+}
+
+.section-tab.active {
+  color: var(--text-primary);
+  background: var(--btn-bg);
+  border-color: var(--border-color);
 }
 
 </style>
