@@ -20,8 +20,8 @@ engine analysis), whose Rust crates will live alongside the storage crate under
 
 ```sh
 mount-build          # once per login session — mounts the build cache
-bun install          # once, or after dependency changes
-bun run tauri dev    # launch the desktop app (hot-reloading Vue UI in a native window)
+bun install (or npm install)          # once, or after dependency changes
+bun run tauri dev (or npm run tauri dev)    # launch the desktop app (hot-reloading Vue UI in a native window)
 ```
 
 ## Commands

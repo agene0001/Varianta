@@ -15,9 +15,18 @@
       >
         Games
       </button>
+      <button
+        class="section-tab"
+        :class="{ active: section === 'settings' }"
+        @click="section = 'settings'"
+      >
+        Settings
+      </button>
     </nav>
 
     <GamesView v-if="section === 'games'" />
+
+    <SettingsView v-else-if="section === 'settings'" />
 
     <template v-else>
     <!-- Home screen: openings grid -->
@@ -179,8 +188,9 @@ import type { Opening, Line } from './types/chess';
 import LineCreator from './components/LineCreator.vue';
 import LichessImporter from './components/LichessImporter.vue';
 import GamesView from './components/GamesView.vue';
+import SettingsView from './components/SettingsView.vue';
 
-const section = ref<'trainer' | 'games'>('trainer');
+const section = ref<'trainer' | 'games' | 'settings'>('trainer');
 const showLineCreator = ref(false);
 const showImporter = ref(false);
 const feedbackMessage = ref('');

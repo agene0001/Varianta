@@ -111,6 +111,18 @@ impl Store {
                         result TEXT NOT NULL,
                         played_at TEXT NOT NULL
                     )",
+                    // Generic key-value settings (e.g. engine_path).
+                    "CREATE TABLE IF NOT EXISTS settings (
+                        key TEXT PRIMARY KEY,
+                        value TEXT NOT NULL
+                    )",
+                    // Engine analysis per game, stored as a JSON blob (a queryable
+                    // per-move table can come with the classification pillar).
+                    "CREATE TABLE IF NOT EXISTS game_analyses (
+                        game_id TEXT PRIMARY KEY,
+                        analyses_json TEXT NOT NULL,
+                        analyzed_at TEXT NOT NULL
+                    )",
                 ],
             })
             .await?;
@@ -302,6 +314,98 @@ impl Store {
         }
         Ok(games)
     }
+
+    // ==================== Settings (key-value) ====================
+
+    /// Get a setting value by key.
+    pub async fn get_setting(&self, key: &str) -> Result<Option<String>, StorageError> {
+        let row = self
+            .handler
+            .execute_write(WriteOp::Single {
+                query: "SELECT value FROM settings WHERE key = ?",
+                params: vec![key.into()],
+                mode: FetchMode::Optional,
+            })
+            .await?
+            .optional()?;
+        match row {
+            Some(r) => Ok(Some(r.try_get::<String, _>(0)?)),
+            None => Ok(None),
+        }
+    }
+
+    /// Set (upsert) a setting value.
+    pub async fn set_setting(&self, key: &str, value: &str) -> Result<(), StorageError> {
+        self.handler
+            .execute_write(WriteOp::Single {
+                query: "INSERT INTO settings (key, value) VALUES (?, ?) \
+                        ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                params: vec![key.into(), value.into()],
+                mode: FetchMode::None,
+            })
+            .await?;
+        Ok(())
+    }
+
+    // ==================== Analysis (Gambit) ====================
+
+    /// The raw PGN of a stored game, if present.
+    pub async fn get_game_pgn(&self, game_id: &str) -> Result<Option<String>, StorageError> {
+        let row = self
+            .handler
+            .execute_write(WriteOp::Single {
+                query: "SELECT pgn FROM games WHERE id = ?",
+                params: vec![game_id.into()],
+                mode: FetchMode::Optional,
+            })
+            .await?
+            .optional()?;
+        Ok(match row {
+            Some(r) => Some(r.try_get::<String, _>(0)?),
+            None => None,
+        })
+    }
+
+    /// Store (upsert) a game's analysis as an opaque JSON blob.
+    pub async fn save_game_analysis(
+        &self,
+        game_id: &str,
+        analyses_json: &str,
+    ) -> Result<(), StorageError> {
+        self.handler
+            .execute_write(WriteOp::Single {
+                query: "INSERT INTO game_analyses (game_id, analyses_json, analyzed_at) \
+                        VALUES (?, ?, ?) \
+                        ON CONFLICT(game_id) DO UPDATE SET \
+                            analyses_json = excluded.analyses_json, \
+                            analyzed_at = excluded.analyzed_at",
+                params: vec![
+                    game_id.into(),
+                    analyses_json.into(),
+                    Utc::now().to_rfc3339().into(),
+                ],
+                mode: FetchMode::None,
+            })
+            .await?;
+        Ok(())
+    }
+
+    /// A game's stored analysis JSON blob, if it's been analyzed.
+    pub async fn get_game_analysis(&self, game_id: &str) -> Result<Option<String>, StorageError> {
+        let row = self
+            .handler
+            .execute_write(WriteOp::Single {
+                query: "SELECT analyses_json FROM game_analyses WHERE game_id = ?",
+                params: vec![game_id.into()],
+                mode: FetchMode::Optional,
+            })
+            .await?
+            .optional()?;
+        Ok(match row {
+            Some(r) => Some(r.try_get::<String, _>(0)?),
+            None => None,
+        })
+    }
 }
 
 // ---- enum <-> stored string mappings (match the serde reprs in gambit-core) ----
@@ -448,6 +552,41 @@ mod tests {
         assert_eq!(games[0].id, g.id);
         assert_eq!(games[0].result, GameResult::WhiteWin);
         assert_eq!(games[0].opponent(), "bob");
+
+        // PGN lookup + analysis blob round-trip.
+        assert_eq!(
+            store.get_game_pgn(&g.id.0).await.unwrap().as_deref(),
+            Some("1. e4 e5 *")
+        );
+        assert!(store.get_game_analysis(&g.id.0).await.unwrap().is_none());
+        store.save_game_analysis(&g.id.0, "[]").await.unwrap();
+        assert_eq!(
+            store.get_game_analysis(&g.id.0).await.unwrap().as_deref(),
+            Some("[]")
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn settings_round_trip() {
+        let dir =
+            std::env::temp_dir().join(format!("varianta-settings-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = Store::open(&dir.join("s.db")).await.unwrap();
+
+        assert_eq!(store.get_setting("engine_path").await.unwrap(), None);
+        store.set_setting("engine_path", "/tmp/sf").await.unwrap();
+        assert_eq!(
+            store.get_setting("engine_path").await.unwrap(),
+            Some("/tmp/sf".into())
+        );
+        // upsert
+        store.set_setting("engine_path", "/tmp/sf2").await.unwrap();
+        assert_eq!(
+            store.get_setting("engine_path").await.unwrap(),
+            Some("/tmp/sf2".into())
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

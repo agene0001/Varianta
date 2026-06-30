@@ -114,6 +114,47 @@ pub enum EngineError {
     Pgn(#[from] gambit_pgn::PgnError),
 }
 
+/// Best-effort auto-detection of a Stockfish binary — the default when no engine
+/// path is configured. Checks, in order: the `STOCKFISH_PATH` env var, En
+/// Croissant's bundled engine (macOS), then `stockfish` on `PATH`.
+pub fn detect_engine_path() -> Option<std::path::PathBuf> {
+    use std::path::PathBuf;
+
+    if let Ok(p) = std::env::var("STOCKFISH_PATH") {
+        let pb = PathBuf::from(p);
+        if pb.is_file() {
+            return Some(pb);
+        }
+    }
+
+    // En Croissant stores engines under its app-data dir (macOS).
+    if let Ok(home) = std::env::var("HOME") {
+        let dir = PathBuf::from(home)
+            .join("Library/Application Support/org.encroissant.app/engines/stockfish");
+        if let Ok(entries) = std::fs::read_dir(&dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                if name.starts_with("stockfish") && !name.contains('.') && entry.path().is_file() {
+                    return Some(entry.path());
+                }
+            }
+        }
+    }
+
+    // `stockfish` on PATH.
+    if let Ok(path) = std::env::var("PATH") {
+        for dir in std::env::split_paths(&path) {
+            let cand = dir.join("stockfish");
+            if cand.is_file() {
+                return Some(cand);
+            }
+        }
+    }
+
+    None
+}
+
 /// A running Stockfish (or any UCI engine) process, driven over stdin/stdout.
 ///
 /// Synchronous and blocking by design — analysis is CPU-bound and long-running,

@@ -26,3 +26,4 @@ tauri-plugin-log = "2"
 varianta-storage = { path = "../crates/varianta-storage" }
 gambit-core = { path = "../crates/gambit-core" }
 gambit-ingest = { path = "../crates/gambit-ingest" }
+gambit-engine = { path = "../crates/gambit-engine" }
