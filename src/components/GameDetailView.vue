@@ -33,7 +33,8 @@ function updateBoardSize() {
   // and the available height (viewport below the board's top, minus a margin),
   // capped at 900 — so it never clips horizontally into the moves or vertically.
   const availWidth = el.clientWidth - 34;
-  const availHeight = window.innerHeight - el.getBoundingClientRect().top - 24;
+  // Reserve ~60px below the board for the "best move" note + a bottom margin.
+  const availHeight = window.innerHeight - el.getBoundingClientRect().top - 60;
   boardPx.value = Math.max(200, Math.min(900, availWidth, availHeight));
 }
 
@@ -153,19 +154,28 @@ const movePairs = computed<MoveRow[]>(() => {
     <p v-if="error" class="detail-error">{{ error }}</p>
 
     <div class="detail-body">
-      <div ref="boardArea" class="board-area">
-        <div class="eval-bar" :style="{ height: boardPx + 'px' }" :title="evalText">
-          <div class="eval-fill" :style="{ height: barPct + '%' }"></div>
-          <span class="eval-text" :class="{ light: barPct < 50 }">{{ evalText }}</span>
+      <div class="board-column">
+        <div ref="boardArea" class="board-area">
+          <div class="eval-bar" :style="{ height: boardPx + 'px' }" :title="evalText">
+            <div class="eval-fill" :style="{ height: barPct + '%' }"></div>
+            <span class="eval-text" :class="{ light: barPct < 50 }">{{ evalText }}</span>
+          </div>
+          <div
+            class="board-wrap"
+            :style="{ width: boardPx + 'px', height: boardPx + 'px', '--bpx': boardPx + 'px' }"
+          >
+            <!-- Key on the FEN only. Resizing is handled live by --bpx + chessground's
+                 own ResizeObserver, so we must NOT remount on boardPx changes (that
+                 re-rendered/"replayed" the move on every resize). -->
+            <TheChessboard :key="currentFen" :board-config="boardConfig" />
+          </div>
         </div>
-        <div
-          class="board-wrap"
-          :style="{ width: boardPx + 'px', height: boardPx + 'px', '--bpx': boardPx + 'px' }"
-        >
-          <!-- Key on the FEN only. Resizing is handled live by --bpx + chessground's
-               own ResizeObserver, so we must NOT remount on boardPx changes (that
-               re-rendered/"replayed" the move on every resize). -->
-          <TheChessboard :key="currentFen" :board-config="boardConfig" />
+
+        <!-- Best-move note under the board (so it's always visible, not buried below
+             the scrolling move list). Only shown when the played move wasn't best. -->
+        <div v-if="current && current.played_uci !== current.best_uci" class="best-move">
+          Best was <code>{{ current.best_uci }}</code>
+          <span class="cp-loss">(−{{ (current.cp_loss / 100).toFixed(1) }})</span>
         </div>
       </div>
 
@@ -211,11 +221,6 @@ const movePairs = computed<MoveRow[]>(() => {
               </span>
               <span v-else class="ply empty"></span>
             </div>
-          </div>
-
-          <div v-if="current && current.played_uci !== current.best_uci" class="best-move">
-            Best was <code>{{ current.best_uci }}</code>
-            <span class="cp-loss">(−{{ (current.cp_loss / 100).toFixed(1) }})</span>
           </div>
         </template>
       </aside>
@@ -315,6 +320,13 @@ const movePairs = computed<MoveRow[]>(() => {
   .detail-body {
     grid-template-columns: minmax(0, 934px);
   }
+}
+
+.board-column {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
 }
 
 .board-area {
@@ -456,7 +468,7 @@ const movePairs = computed<MoveRow[]>(() => {
 }
 
 .best-move {
-  margin-top: 12px;
+  margin-top: 0;
   padding: 10px 12px;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
