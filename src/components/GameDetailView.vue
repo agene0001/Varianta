@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 // @ts-ignore - vue3-chessboard has no types
 import { TheChessboard } from 'vue3-chessboard';
 import 'vue3-chessboard/style.css';
+import { Chess } from 'chess.js';
 import { opponent, outcome, type Game } from '../composables/useGames';
 import {
   getGameAnalysis,
@@ -66,6 +67,34 @@ async function onAnalyze() {
     error.value = String(e);
   } finally {
     loading.value = false;
+  }
+}
+
+// Advance the selection to the next mistake/blunder (wraps around).
+function nextMistake() {
+  const list = analyses.value;
+  if (!list?.length) return;
+  for (let off = 1; off <= list.length; off++) {
+    const i = (selected.value + off + list.length) % list.length;
+    if (list[i].severity === 'mistake' || list[i].severity === 'blunder') {
+      selected.value = i;
+      return;
+    }
+  }
+}
+
+// The engine's best move in SAN (e.g. "e4"), converted from UCI via chess.js.
+function bestSan(a: MoveAnalysis): string {
+  try {
+    const c = new Chess(a.fen);
+    const m = c.move({
+      from: a.best_uci.slice(0, 2),
+      to: a.best_uci.slice(2, 4),
+      promotion: a.best_uci.slice(4) || undefined,
+    });
+    return m?.san ?? a.best_uci;
+  } catch {
+    return a.best_uci;
   }
 }
 
@@ -141,14 +170,12 @@ const movePairs = computed<MoveRow[]>(() => {
           {{ outcomeLabel[outcome(game)] }} vs {{ opponent(game) }}
         </span>
       </div>
-      <button
-        v-if="analyses?.length"
-        class="analyze-btn"
-        :disabled="loading"
-        @click="onAnalyze"
-      >
-        {{ loading ? 'Analyzing…' : 'Re-analyze' }}
-      </button>
+      <div v-if="analyses?.length" class="header-actions">
+        <button class="analyze-btn" @click="nextMistake">Next mistake ›</button>
+        <button class="analyze-btn" :disabled="loading" @click="onAnalyze">
+          {{ loading ? 'Analyzing…' : 'Re-analyze' }}
+        </button>
+      </div>
     </header>
 
     <p v-if="error" class="detail-error">{{ error }}</p>
@@ -174,7 +201,7 @@ const movePairs = computed<MoveRow[]>(() => {
         <!-- Best-move note under the board (so it's always visible, not buried below
              the scrolling move list). Only shown when the played move wasn't best. -->
         <div v-if="current && current.played_uci !== current.best_uci" class="best-move">
-          Best was <code>{{ current.best_uci }}</code>
+          Best was <code>{{ bestSan(current) }}</code>
           <span class="cp-loss">(−{{ (current.cp_loss / 100).toFixed(1) }})</span>
         </div>
       </div>
@@ -275,8 +302,13 @@ const movePairs = computed<MoveRow[]>(() => {
   color: #ff8a8a;
 }
 
-.analyze-btn {
+.header-actions {
   margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.analyze-btn {
   background: var(--btn-bg);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
