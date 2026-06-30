@@ -7,9 +7,11 @@ import {
   outcome,
   type Game,
 } from '../composables/useGames';
+import GameDetailView from './GameDetailView.vue';
 
 const PAGE_SIZE = 25;
 
+const selectedGame = ref<Game | null>(null);
 const username = ref('');
 const games = ref<Game[]>([]);
 const visibleCount = ref(PAGE_SIZE);
@@ -65,6 +67,9 @@ const outcomeLabel: Record<string, string> = {
 
 <template>
   <section class="games-view">
+    <GameDetailView v-if="selectedGame" :game="selectedGame" @back="selectedGame = null" />
+
+    <template v-else>
     <header class="games-header">
       <h2>My Games</h2>
       <form class="import-bar" @submit.prevent="onImport">
@@ -98,7 +103,7 @@ const outcomeLabel: Record<string, string> = {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="g in visibleGames" :key="g.id">
+          <tr v-for="g in visibleGames" :key="g.id" class="game-row" @click="selectedGame = g">
             <td>{{ fmtDate(g.played_at) }}</td>
             <td>
               <span class="color-dot" :class="g.player_color"></span>
@@ -117,6 +122,7 @@ const outcomeLabel: Record<string, string> = {
         <button v-if="hasMore" class="view-more-btn" @click="viewMore">View more</button>
       </footer>
     </div>
+    </template>
   </section>
 </template>
 
@@ -281,5 +287,13 @@ const outcomeLabel: Record<string, string> = {
   padding: 8px 20px;
   border-radius: 8px;
   cursor: pointer;
+}
+
+.game-row {
+  cursor: pointer;
+}
+
+.game-row:hover td {
+  background: var(--bg-card-hover);
 }
 </style>
