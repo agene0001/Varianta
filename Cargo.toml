@@ -6,6 +6,8 @@ members = [
     # Gambit (game import + analysis) crates:
     "crates/gambit-core",
     "crates/gambit-ingest",
+    "crates/gambit-engine",
+    "crates/gambit-pgn",
 ]
 
 [workspace.package]

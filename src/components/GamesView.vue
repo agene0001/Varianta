@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import {
   listGames,
   importGames,
@@ -8,14 +8,29 @@ import {
   type Game,
 } from '../composables/useGames';
 
+const PAGE_SIZE = 25;
+
 const username = ref('');
 const games = ref<Game[]>([]);
+const visibleCount = ref(PAGE_SIZE);
 const loading = ref(false);
 const error = ref('');
 
+const visibleGames = computed(() => games.value.slice(0, visibleCount.value));
+const hasMore = computed(() => visibleCount.value < games.value.length);
+
+function setGames(list: Game[]) {
+  games.value = list;
+  visibleCount.value = PAGE_SIZE; // reset paging whenever the set changes
+}
+
+function viewMore() {
+  visibleCount.value = Math.min(visibleCount.value + PAGE_SIZE, games.value.length);
+}
+
 onMounted(async () => {
   try {
-    games.value = await listGames();
+    setGames(await listGames());
   } catch (e) {
     error.value = String(e);
   }
@@ -27,7 +42,7 @@ async function onImport() {
   loading.value = true;
   error.value = '';
   try {
-    games.value = await importGames(name);
+    setGames(await importGames(name));
   } catch (e) {
     error.value = String(e);
   } finally {
@@ -83,7 +98,7 @@ const outcomeLabel: Record<string, string> = {
           </tr>
         </thead>
         <tbody>
-          <tr v-for="g in games" :key="g.id">
+          <tr v-for="g in visibleGames" :key="g.id">
             <td>{{ fmtDate(g.played_at) }}</td>
             <td>
               <span class="color-dot" :class="g.player_color"></span>
@@ -96,6 +111,11 @@ const outcomeLabel: Record<string, string> = {
           </tr>
         </tbody>
       </table>
+
+      <footer class="games-footer">
+        <span class="games-count">Showing {{ visibleGames.length }} of {{ games.length }}</span>
+        <button v-if="hasMore" class="view-more-btn" @click="viewMore">View more</button>
+      </footer>
     </div>
   </section>
 </template>
@@ -238,5 +258,28 @@ const outcomeLabel: Record<string, string> = {
 .result.unknown {
   background: rgba(90, 100, 146, 0.12);
   color: var(--text-muted);
+}
+
+.games-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 18px 0;
+}
+
+.games-count {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.view-more-btn {
+  background: var(--btn-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-weight: 600;
+  padding: 8px 20px;
+  border-radius: 8px;
+  cursor: pointer;
 }
 </style>

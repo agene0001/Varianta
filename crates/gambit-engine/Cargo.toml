@@ -1,0 +1,14 @@
+[package]
+name = "gambit-engine"
+version = "0.1.0"
+description = "Gambit engine layer: Stockfish UCI client and analysis"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+gambit-core = { path = "../gambit-core" }
+gambit-pgn = { path = "../gambit-pgn" }
+serde.workspace = true
+thiserror.workspace = true
