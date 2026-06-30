@@ -9,6 +9,9 @@ use gambit_core::Color;
 use gambit_pgn::parse_game;
 use serde::{Deserialize, Serialize};
 
+mod concepts;
+pub use concepts::Concept;
+
 /// An engine evaluation of a position, from the side-to-move's perspective.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "lowercase")]
@@ -273,6 +276,10 @@ pub struct MoveAnalysis {
     /// Centipawns lost vs. best play (>= 0).
     pub cp_loss: i32,
     pub severity: Severity,
+    /// Tactical themes for the mistake (only populated for mistakes/blunders).
+    /// `#[serde(default)]` for analyses stored before classification existed.
+    #[serde(default)]
+    pub concepts: Vec<Concept>,
 }
 
 /// Collapse a score to a centipawn number for comparison. Mates map to large
@@ -359,6 +366,20 @@ impl UciEngine {
                 game.final_fen.clone()
             };
 
+            let severity = classify(cp_loss, played_is_best);
+            // Classify the *why* only when the move actually went wrong.
+            let move_concepts = if matches!(severity, Severity::Mistake | Severity::Blunder) {
+                concepts::classify(
+                    &step.fen_before,
+                    &best_uci,
+                    &step.uci,
+                    before.score,
+                    eval_after,
+                )
+            } else {
+                Vec::new()
+            };
+
             out.push(MoveAnalysis {
                 ply: step.ply,
                 fen: step.fen_before.clone(),
@@ -370,7 +391,8 @@ impl UciEngine {
                 eval_before: before.score,
                 eval_after,
                 cp_loss,
-                severity: classify(cp_loss, played_is_best),
+                severity,
+                concepts: move_concepts,
             });
         }
         Ok(out)

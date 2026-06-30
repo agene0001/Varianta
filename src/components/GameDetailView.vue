@@ -10,6 +10,7 @@ import {
   analyzeGame,
   evalLabel,
   whiteBarPct,
+  CONCEPT_LABELS,
   type MoveAnalysis,
 } from '../composables/useAnalysis';
 
@@ -244,6 +245,11 @@ const movePairs = computed<MoveRow[]>(() => {
         >
           Best was <code>{{ bestSan(current) }}</code>
           <span class="cp-loss">(−{{ (current.cp_loss / 100).toFixed(1) }})</span>
+          <span
+            v-for="c in current.concepts"
+            :key="c"
+            class="concept-chip"
+          >{{ CONCEPT_LABELS[c] }}</span>
         </div>
       </div>
 
@@ -557,5 +563,18 @@ const movePairs = computed<MoveRow[]>(() => {
 .cp-loss {
   color: #ff8a8a;
   margin-left: 4px;
+}
+
+.concept-chip {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 138, 138, 0.14);
+  border: 1px solid rgba(255, 138, 138, 0.35);
+  color: #ffb3b3;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 </style>

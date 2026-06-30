@@ -11,4 +11,5 @@ rust-version.workspace = true
 gambit-core = { path = "../gambit-core" }
 gambit-pgn = { path = "../gambit-pgn" }
 serde.workspace = true
+shakmaty = "0.30"
 thiserror.workspace = true

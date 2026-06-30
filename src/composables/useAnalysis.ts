@@ -6,6 +6,16 @@ const inTauri =
 export type Severity = "best" | "good" | "inaccuracy" | "mistake" | "blunder";
 export type Score = { kind: "cp"; value: number } | { kind: "mate"; value: number };
 
+/** Tactical themes a mistake can be tagged with (mirrors `gambit_engine::Concept`). */
+export type Concept = "missed_mate" | "fork" | "hanging_piece";
+
+/** Short human labels for each concept, shown as chips on the mistake. */
+export const CONCEPT_LABELS: Record<Concept, string> = {
+  missed_mate: "Missed mate",
+  fork: "Missed a fork",
+  hanging_piece: "Hangs a piece",
+};
+
 /** Mirrors `gambit_engine::MoveAnalysis` (serde snake_case). */
 export interface MoveAnalysis {
   ply: number;
@@ -21,6 +31,8 @@ export interface MoveAnalysis {
   eval_after: Score;
   cp_loss: number;
   severity: Severity;
+  /** Tactical themes for the mistake (empty for non-mistakes / old analyses). */
+  concepts: Concept[];
 }
 
 /** A game's stored analysis, or null if it hasn't been analyzed. */
