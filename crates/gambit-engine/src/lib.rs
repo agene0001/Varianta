@@ -256,6 +256,10 @@ pub struct MoveAnalysis {
     pub ply: u32,
     /// Position before the move (FEN).
     pub fen: String,
+    /// Position after the move (FEN). `#[serde(default)]` for analyses stored
+    /// before this field existed (they'll have an empty string).
+    #[serde(default)]
+    pub fen_after: String,
     /// Side that made the move.
     pub side: Color,
     pub san: String,
@@ -348,9 +352,17 @@ impl UciEngine {
                 None => (before.score, 0),
             };
 
+            // Position after this move = the next ply's start, or the final position.
+            let fen_after = if i + 1 < n {
+                game.steps[i + 1].fen_before.clone()
+            } else {
+                game.final_fen.clone()
+            };
+
             out.push(MoveAnalysis {
                 ply: step.ply,
                 fen: step.fen_before.clone(),
+                fen_after,
                 side: step.side_to_move,
                 san: step.san.clone(),
                 played_uci: step.uci.clone(),
@@ -439,6 +451,8 @@ mod tests {
         for a in &analyses {
             assert!(!a.best_uci.is_empty());
             assert!(!a.fen.is_empty());
+            assert!(!a.fen_after.is_empty());
+            assert_ne!(a.fen_after, a.fen);
             assert!(a.cp_loss >= 0);
         }
         // Sound opening moves shouldn't be flagged as blunders.

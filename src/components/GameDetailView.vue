@@ -72,7 +72,12 @@ const current = computed(() =>
   selected.value >= 0 && analyses.value ? analyses.value[selected.value] : null,
 );
 
-const currentFen = computed(() => current.value?.fen ?? START_FEN);
+const currentFen = computed(() => {
+  const c = current.value;
+  // Show the position AFTER the selected move (fall back to before-FEN for analyses
+  // saved before fen_after existed).
+  return c ? c.fen_after || c.fen : START_FEN;
+});
 
 const boardConfig = computed(() => ({
   fen: currentFen.value,
@@ -157,9 +162,10 @@ const movePairs = computed<MoveRow[]>(() => {
           class="board-wrap"
           :style="{ width: boardPx + 'px', height: boardPx + 'px', '--bpx': boardPx + 'px' }"
         >
-          <!-- Key on boardPx so the board remounts and re-fits chessground to the
-               container size when it changes (chessground doesn't shrink on its own here). -->
-          <TheChessboard :key="currentFen + ':' + boardPx" :board-config="boardConfig" />
+          <!-- Key on the FEN only. Resizing is handled live by --bpx + chessground's
+               own ResizeObserver, so we must NOT remount on boardPx changes (that
+               re-rendered/"replayed" the move on every resize). -->
+          <TheChessboard :key="currentFen" :board-config="boardConfig" />
         </div>
       </div>
 

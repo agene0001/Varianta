@@ -11,7 +11,7 @@ rust-version.workspace = true
 # Local path dep while dbkit-rs is under active development; pin to the
 # published version later. SQLite-only — drop the default `postgres` feature so
 # the desktop build doesn't pull in a Postgres driver.
-dbkit-rs = { version="0.4.1", default-features = false, features = ["sqlite"] }
+dbkit-rs = { version="0.4.2", default-features = false, features = ["sqlite"] }
 # Direct sqlx dep (same 0.9 as dbkit) so the `Row` trait is in scope to read
 # columns off the `AnyRow`s that dbkit returns. Features union with dbkit's.
 sqlx = { version = "0.9", default-features = false, features = ["any"] }

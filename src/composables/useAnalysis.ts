@@ -9,7 +9,10 @@ export type Score = { kind: "cp"; value: number } | { kind: "mate"; value: numbe
 /** Mirrors `gambit_engine::MoveAnalysis` (serde snake_case). */
 export interface MoveAnalysis {
   ply: number;
+  /** Position before the move. */
   fen: string;
+  /** Position after the move (empty for analyses saved before this field). */
+  fen_after: string;
   side: "white" | "black";
   san: string;
   played_uci: string;
@@ -32,9 +35,9 @@ export async function analyzeGame(gameId: string, depth?: number): Promise<MoveA
   return await invoke<MoveAnalysis[]>("analyze_game", { gameId, depth });
 }
 
-/** Centipawns from White's perspective (eval_before is side-to-move relative). */
+/** Centipawns from White's perspective (eval_after is side-to-move relative). */
 export function whiteCp(a: MoveAnalysis): number {
-  const s = a.eval_before;
+  const s = a.eval_after;
   const cp =
     s.kind === "cp"
       ? s.value
@@ -46,7 +49,7 @@ export function whiteCp(a: MoveAnalysis): number {
 
 /** Human eval label from White's perspective, e.g. "+1.2" or "M3". */
 export function evalLabel(a: MoveAnalysis): string {
-  const s = a.eval_before;
+  const s = a.eval_after;
   if (s.kind === "mate") {
     const m = a.side === "white" ? s.value : -s.value;
     return `M${Math.abs(m)}`;
