@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 // @ts-ignore - vue3-chessboard has no types
 import { TheChessboard } from 'vue3-chessboard';
 import 'vue3-chessboard/style.css';
@@ -102,19 +102,56 @@ const current = computed(() =>
   selected.value >= 0 && analyses.value ? analyses.value[selected.value] : null,
 );
 
-const currentFen = computed(() => {
+function squares(uci: string): [string, string] {
+  return [uci.slice(0, 2), uci.slice(2, 4)];
+}
+
+// Every move shows the RESULTING position, so navigating always advances exactly
+// one ply. On a mistake/blunder we additionally draw arrows from the moving
+// piece's origin: green = engine's best move, red = the move actually played.
+// (Driven onto the live board via the API in a watcher — reactive-config does
+// not apply fen updates here.)
+const boardView = computed(() => {
   const c = current.value;
-  // Show the position AFTER the selected move (fall back to before-FEN for analyses
-  // saved before fen_after existed).
-  return c ? c.fen_after || c.fen : START_FEN;
+  if (!c) return { fen: START_FEN, shapes: [] as Array<Record<string, string>> };
+  const fen = c.fen_after || c.fen;
+  if (c.severity === 'mistake' || c.severity === 'blunder') {
+    const [bo, bd] = squares(c.best_uci);
+    const [po, pd] = squares(c.played_uci);
+    return {
+      fen,
+      shapes: [
+        { orig: bo, dest: bd, brush: 'green' },
+        { orig: po, dest: pd, brush: 'red' },
+      ],
+    };
+  }
+  return { fen, shapes: [] as Array<Record<string, string>> };
 });
 
-const boardConfig = computed(() => ({
-  fen: currentFen.value,
+// Only the initial config; live updates go through the API below.
+const boardConfig = computed<any>(() => ({
+  fen: boardView.value.fen,
+  orientation: props.game.player_color,
   viewOnly: true,
   coordinates: true,
-  orientation: props.game.player_color,
+  drawable: { enabled: false },
 }));
+
+let boardApi: any = null;
+
+function applyBoardView() {
+  if (!boardApi) return;
+  boardApi.setPosition(boardView.value.fen);
+  boardApi.setShapes(boardView.value.shapes);
+}
+
+function onBoardCreated(api: any) {
+  boardApi = api;
+  applyBoardView();
+}
+
+watch(boardView, applyBoardView);
 
 const barPct = computed(() => (current.value ? whiteBarPct(current.value) : 50));
 const evalText = computed(() => (current.value ? evalLabel(current.value) : '0.0'));
@@ -191,16 +228,20 @@ const movePairs = computed<MoveRow[]>(() => {
             class="board-wrap"
             :style="{ width: boardPx + 'px', height: boardPx + 'px', '--bpx': boardPx + 'px' }"
           >
-            <!-- Key on the FEN only. Resizing is handled live by --bpx + chessground's
-                 own ResizeObserver, so we must NOT remount on boardPx changes (that
-                 re-rendered/"replayed" the move on every resize). -->
-            <TheChessboard :key="currentFen" :board-config="boardConfig" />
+            <!-- reactive-config (no :key) so navigating updates the LIVE board:
+                 chessground animates/highlights the single move instead of remounting
+                 (a remount snapped to a fresh position with nothing to track). Resize
+                 is handled by --bpx + chessground's own ResizeObserver. -->
+            <TheChessboard :board-config="boardConfig" @board-created="onBoardCreated" />
           </div>
         </div>
 
         <!-- Best-move note under the board (so it's always visible, not buried below
              the scrolling move list). Only shown when the played move wasn't best. -->
-        <div v-if="current && current.played_uci !== current.best_uci" class="best-move">
+        <div
+          v-if="current && (current.severity === 'mistake' || current.severity === 'blunder')"
+          class="best-move"
+        >
           Best was <code>{{ bestSan(current) }}</code>
           <span class="cp-loss">(−{{ (current.cp_loss / 100).toFixed(1) }})</span>
         </div>
