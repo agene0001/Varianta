@@ -66,10 +66,8 @@ const outcomeLabel: Record<string, string> = {
 </script>
 
 <template>
-  <section class="games-view">
-    <GameDetailView v-if="selectedGame" :game="selectedGame" @back="selectedGame = null" />
-
-    <template v-else>
+  <GameDetailView v-if="selectedGame" :game="selectedGame" @back="selectedGame = null" />
+  <section v-else class="games-view">
     <header class="games-header">
       <h2>My Games</h2>
       <form class="import-bar" @submit.prevent="onImport">
@@ -122,7 +120,6 @@ const outcomeLabel: Record<string, string> = {
         <button v-if="hasMore" class="view-more-btn" @click="viewMore">View more</button>
       </footer>
     </div>
-    </template>
   </section>
 </template>
 
