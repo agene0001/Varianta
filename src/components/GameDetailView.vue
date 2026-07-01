@@ -5,6 +5,7 @@ import { TheChessboard } from 'vue3-chessboard';
 import 'vue3-chessboard/style.css';
 import { Chess } from 'chess.js';
 import { opponent, outcome, type Game } from '../composables/useGames';
+import GamePuzzles from './GamePuzzles.vue';
 import {
   getGameAnalysis,
   analyzeGame,
@@ -24,6 +25,15 @@ const analyses = ref<MoveAnalysis[] | null>(null);
 const selected = ref(-1); // -1 = starting position
 const loading = ref(false);
 const error = ref('');
+
+// Mistake trainer: mistakes/blunders that carry a stored engine line are puzzles.
+const puzzleMode = ref(false);
+const trainableCount = computed(
+  () =>
+    analyses.value?.filter(
+      (a) => (a.severity === 'mistake' || a.severity === 'blunder') && a.best_line?.length,
+    ).length ?? 0,
+);
 
 const boardArea = ref<HTMLElement | null>(null);
 const boardPx = ref(440);
@@ -318,7 +328,13 @@ const movePairs = computed<MoveRow[]>(() => {
 </script>
 
 <template>
-  <section class="detail">
+  <GamePuzzles
+    v-if="puzzleMode"
+    :analyses="analyses ?? []"
+    :game="game"
+    @exit="puzzleMode = false"
+  />
+  <section v-else class="detail">
     <header class="detail-header">
       <button class="back-btn" @click="emit('back')">← Games</button>
       <div class="detail-title">
@@ -328,6 +344,13 @@ const movePairs = computed<MoveRow[]>(() => {
         </span>
       </div>
       <div v-if="analyses?.length" class="header-actions">
+        <button
+          v-if="trainableCount"
+          class="analyze-btn"
+          @click="puzzleMode = true"
+        >
+          Train mistakes ({{ trainableCount }})
+        </button>
         <button class="analyze-btn" @click="nextMistake">Next mistake ›</button>
         <button class="analyze-btn" :disabled="loading" @click="onAnalyze">
           {{ loading ? 'Analyzing…' : 'Re-analyze' }}
