@@ -11,6 +11,7 @@ import {
   evalLabel,
   whiteBarPct,
   CONCEPT_LABELS,
+  CONCEPT_ICONS,
   type MoveAnalysis,
 } from '../composables/useAnalysis';
 
@@ -279,7 +280,12 @@ const movePairs = computed<MoveRow[]>(() => {
                 {{ row.white.san
                 }}<span v-if="annotation[row.white.severity]" class="annot">{{
                   annotation[row.white.severity]
-                }}</span>
+                }}</span><span
+                  v-for="c in row.white.concepts"
+                  :key="c"
+                  class="concept-mark"
+                  :title="CONCEPT_LABELS[c]"
+                  >{{ CONCEPT_ICONS[c] }}</span>
               </span>
               <span v-else class="ply empty"></span>
               <span
@@ -291,7 +297,12 @@ const movePairs = computed<MoveRow[]>(() => {
                 {{ row.black.san
                 }}<span v-if="annotation[row.black.severity]" class="annot">{{
                   annotation[row.black.severity]
-                }}</span>
+                }}</span><span
+                  v-for="c in row.black.concepts"
+                  :key="c"
+                  class="concept-mark"
+                  :title="CONCEPT_LABELS[c]"
+                  >{{ CONCEPT_ICONS[c] }}</span>
               </span>
               <span v-else class="ply empty"></span>
             </div>
@@ -544,6 +555,13 @@ const movePairs = computed<MoveRow[]>(() => {
 
 .ply.blunder .annot {
   color: #ff5050;
+}
+
+.concept-mark {
+  margin-left: 3px;
+  font-size: 0.82em;
+  cursor: help;
+  vertical-align: middle;
 }
 
 .best-move {

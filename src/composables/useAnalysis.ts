@@ -27,6 +27,17 @@ export const CONCEPT_LABELS: Record<Concept, string> = {
   hanging_piece: "Hangs a piece",
 };
 
+/** A compact glyph per concept, for at-a-glance markers in the move list. */
+export const CONCEPT_ICONS: Record<Concept, string> = {
+  missed_mate: "👑",
+  back_rank_mate: "🔒",
+  fork: "🔱",
+  pin: "📌",
+  skewer: "🍡",
+  discovered_attack: "🔍",
+  hanging_piece: "⚠️",
+};
+
 /** Mirrors `gambit_engine::MoveAnalysis` (serde snake_case). */
 export interface MoveAnalysis {
   ply: number;
