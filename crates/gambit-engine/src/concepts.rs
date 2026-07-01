@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 use shakmaty::fen::Fen;
 use shakmaty::uci::UciMove;
-use shakmaty::{attacks, Bitboard, CastlingMode, Chess, Color, Position, Rank, Role, Square};
+use shakmaty::{attacks, Bitboard, CastlingMode, Chess, Color, File, Position, Rank, Role, Square};
 
 use crate::Score;
 
@@ -30,6 +30,12 @@ pub enum Concept {
     DiscoveredAttack,
     /// The move played left a piece en prise (attacked and undefended).
     HangingPiece,
+    /// The move played exposed its own king (lost pawn shield / king pressure).
+    WeakenedKing,
+    /// The move played created a weak pawn (doubled or isolated).
+    CreatedWeakPawn,
+    /// The move played left a piece passive (much lower mobility than the best move).
+    PassivePiece,
 }
 
 /// Classify a single move's mistake into zero or more [`Concept`]s.
@@ -55,32 +61,44 @@ pub fn classify(
     let Some(pos) = parse_position(fen) else {
         return out;
     };
+    let best = play(&pos, best_uci);
+    let played = play(&pos, played_uci);
 
     // Concepts describing the tactic the player *missed* — derived from the
     // position after the engine's best move.
-    if let Some((after_best, from, to)) = play(&pos, best_uci) {
-        if is_back_rank_mate(&after_best) {
+    if let Some((after_best, from, to)) = &best {
+        if is_back_rank_mate(after_best) {
             out.push(Concept::BackRankMate);
         }
-        if is_fork(&after_best, to) {
+        if is_fork(after_best, *to) {
             out.push(Concept::Fork);
         }
-        match xray(&after_best, to) {
+        match xray(after_best, *to) {
             Some(XRay::Pin) => out.push(Concept::Pin),
             Some(XRay::Skewer) => out.push(Concept::Skewer),
             None => {}
         }
         if let Some(from) = from {
-            if is_discovered_attack(&after_best, from) {
+            if is_discovered_attack(after_best, *from) {
                 out.push(Concept::DiscoveredAttack);
             }
         }
     }
 
     // Concepts describing what the move *played* did wrong (hangs material).
-    if let Some((after_played, _, _)) = play(&pos, played_uci) {
-        if hangs_piece(&after_played) {
+    if let Some((after_played, _, _)) = &played {
+        if hangs_piece(after_played) {
             out.push(Concept::HangingPiece);
+        }
+    }
+
+    // No concrete tactic named → attribute the eval drop to the positional
+    // feature the played move worsened most vs. the best move.
+    if out.is_empty() {
+        if let (Some((after_best, ..)), Some((after_played, ..))) = (&best, &played) {
+            if let Some(concept) = positional_concept(after_best, after_played) {
+                out.push(concept);
+            }
         }
     }
 
@@ -227,6 +245,107 @@ fn is_back_rank_mate(after: &Chess) -> bool {
     king.rank() == back_rank
 }
 
+/// Cheap positional metrics for the side that just moved (`them()` after the
+/// move). Higher `king_danger`/`weak_pawns` is worse; higher `mobility` is better.
+struct Features {
+    king_danger: i32,
+    weak_pawns: i32,
+    mobility: i32,
+}
+
+fn features(after: &Chess) -> Features {
+    let board = after.board();
+    let occ = board.occupied();
+    let mover = after.them();
+    let enemy_color = after.turn();
+    let pawns: Bitboard = mover
+        .into_iter()
+        .filter(|&sq| board.role_at(sq) == Some(Role::Pawn))
+        .collect();
+
+    // King safety: missing pawn shield (weighted) + enemy pressure on the king ring.
+    let king_danger = match mover
+        .into_iter()
+        .find(|&sq| board.role_at(sq) == Some(Role::King))
+    {
+        Some(king) => {
+            let ring = attacks::king_attacks(king);
+            let shield = (ring & pawns).count() as i32;
+            let missing = (3 - shield.min(3)).max(0);
+            let pressure = ring
+                .into_iter()
+                .filter(|&sq| !board.attacks_to(sq, enemy_color, occ).is_empty())
+                .count() as i32;
+            missing * 2 + pressure
+        }
+        None => 0,
+    };
+
+    // Pawn weaknesses: doubled + isolated.
+    let mut weak_pawns = 0;
+    for (i, &file) in File::ALL.iter().enumerate() {
+        let count = (pawns & Bitboard::from_file(file)).count() as i32;
+        if count == 0 {
+            continue;
+        }
+        if count >= 2 {
+            weak_pawns += count - 1; // doubled
+        }
+        let left = i
+            .checked_sub(1)
+            .map(|j| (pawns & Bitboard::from_file(File::ALL[j])).count())
+            .unwrap_or(0);
+        let right = File::ALL
+            .get(i + 1)
+            .map(|&f| (pawns & Bitboard::from_file(f)).count())
+            .unwrap_or(0);
+        if left == 0 && right == 0 {
+            weak_pawns += count; // isolated (no friendly pawn on adjacent files)
+        }
+    }
+
+    // Piece activity: pseudo-mobility (attacked non-own squares) of minors/majors.
+    let mut mobility = 0;
+    for sq in mover {
+        if let Some(piece) = board.piece_at(sq) {
+            if matches!(
+                piece.role,
+                Role::Knight | Role::Bishop | Role::Rook | Role::Queen
+            ) {
+                mobility += (attacks::attacks(sq, piece, occ) & !mover).count() as i32;
+            }
+        }
+    }
+
+    Features {
+        king_danger,
+        weak_pawns,
+        mobility,
+    }
+}
+
+/// Attribute a tactic-less mistake to the positional feature the played move
+/// worsened most, relative to the engine's best move. `None` if nothing crosses
+/// its threshold (the move had no clear positional cost we can name).
+fn positional_concept(after_best: &Chess, after_played: &Chess) -> Option<Concept> {
+    let best = features(after_best);
+    let played = features(after_played);
+    // (concept, how-much-worse the played move is on this axis, threshold)
+    let axes = [
+        (Concept::WeakenedKing, played.king_danger - best.king_danger, 2),
+        (Concept::CreatedWeakPawn, played.weak_pawns - best.weak_pawns, 1),
+        (Concept::PassivePiece, best.mobility - played.mobility, 4),
+    ];
+    axes.into_iter()
+        .filter(|&(_, delta, threshold)| delta >= threshold)
+        .max_by(|a, b| {
+            (a.1 as f32 / a.2 as f32)
+                .partial_cmp(&(b.1 as f32 / b.2 as f32))
+                .unwrap()
+        })
+        .map(|(concept, _, _)| concept)
+}
+
 /// True if a minor-or-better piece of the side that just moved is attacked by the
 /// opponent and has no defender — i.e. hanging.
 fn hangs_piece(after: &Chess) -> bool {
@@ -339,14 +458,55 @@ mod tests {
     }
 
     #[test]
+    fn detects_weakened_king() {
+        // Best a2a3 keeps the shield; g2g4 opens a hole in front of the Kg1.
+        let c = classify(
+            "6k1/8/8/8/8/8/1PP2PPP/6K1 w - - 0 1",
+            "b2b3",
+            "g2g4",
+            Score::Cp(0),
+            Score::Cp(0),
+        );
+        assert!(c.contains(&Concept::WeakenedKing), "{c:?}");
+    }
+
+    #[test]
+    fn detects_created_weak_pawn() {
+        // Recapturing on c3 with the b-pawn (bxc3) doubles and isolates the
+        // c-pawns; Nxc3 keeps a healthy structure.
+        let c = classify(
+            "6k1/8/8/8/8/2p5/1PP1N3/6K1 w - - 0 1",
+            "e2c3",
+            "b2c3",
+            Score::Cp(0),
+            Score::Cp(0),
+        );
+        assert!(c.contains(&Concept::CreatedWeakPawn), "{c:?}");
+    }
+
+    #[test]
+    fn detects_passive_piece() {
+        // Nb1-c3 (central, 8 moves) is far more active than Nb1-a3 (rim, 4 moves).
+        let c = classify(
+            "6k1/8/8/8/8/8/8/1N4K1 w - - 0 1",
+            "b1c3",
+            "b1a3",
+            Score::Cp(0),
+            Score::Cp(0),
+        );
+        assert!(c.contains(&Concept::PassivePiece), "{c:?}");
+    }
+
+    #[test]
     fn quiet_move_has_no_concepts() {
+        // Two near-identical quiet a-pawn moves — no feature crosses threshold.
         let c = classify(
             "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-            "e2e4",
-            "d2d4",
+            "a2a3",
+            "a2a4",
             Score::Cp(20),
             Score::Cp(15),
         );
-        assert!(c.is_empty());
+        assert!(c.is_empty(), "{c:?}");
     }
 }

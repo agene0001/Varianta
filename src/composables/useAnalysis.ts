@@ -14,7 +14,10 @@ export type Concept =
   | "pin"
   | "skewer"
   | "discovered_attack"
-  | "hanging_piece";
+  | "hanging_piece"
+  | "weakened_king"
+  | "created_weak_pawn"
+  | "passive_piece";
 
 /** Short human labels for each concept, shown as chips on the mistake. */
 export const CONCEPT_LABELS: Record<Concept, string> = {
@@ -25,6 +28,9 @@ export const CONCEPT_LABELS: Record<Concept, string> = {
   skewer: "Missed a skewer",
   discovered_attack: "Missed a discovered attack",
   hanging_piece: "Hangs a piece",
+  weakened_king: "Weakened king",
+  created_weak_pawn: "Weak pawn",
+  passive_piece: "Passive piece",
 };
 
 /** A compact glyph per concept, for at-a-glance markers in the move list. */
@@ -36,6 +42,9 @@ export const CONCEPT_ICONS: Record<Concept, string> = {
   skewer: "🍡",
   discovered_attack: "🔍",
   hanging_piece: "⚠️",
+  weakened_king: "🛡️",
+  created_weak_pawn: "♟️",
+  passive_piece: "🐌",
 };
 
 /** Mirrors `gambit_engine::MoveAnalysis` (serde snake_case). */
