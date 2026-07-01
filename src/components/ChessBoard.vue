@@ -51,8 +51,25 @@ const onMove = (move: any) => emit('move', move);
 
 <style scoped>
 .chess-board-container {
+  position: relative;
   width: 100%;
   max-width: 600px;
   aspect-ratio: 1;
+}
+
+/* vue3-chessboard/chessground sizes itself off the viewport and ignores this
+   container, overflowing into the sidebar. Pin its board to the container's box
+   (which has a definite size via aspect-ratio) so it can never exceed it. */
+.chess-board-container :deep(.main-board) {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding-bottom: 0;
+}
+
+.chess-board-container :deep(.cg-wrap) {
+  width: 100%;
+  height: 100%;
 }
 </style>
