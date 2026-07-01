@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 use shakmaty::fen::Fen;
 use shakmaty::uci::UciMove;
-use shakmaty::{attacks, CastlingMode, Chess, Position, Role, Square};
+use shakmaty::{attacks, Bitboard, CastlingMode, Chess, Color, Position, Rank, Role, Square};
 
 use crate::Score;
 
@@ -18,8 +18,16 @@ use crate::Score;
 pub enum Concept {
     /// Had a forced mate available and let it slip.
     MissedMate,
+    /// The best (missed) move delivers checkmate on the opponent's back rank.
+    BackRankMate,
     /// The best (missed) move forks two or more valuable pieces.
     Fork,
+    /// The best (missed) move pins an enemy piece to a more valuable one behind it.
+    Pin,
+    /// The best (missed) move skewers an enemy piece to a less valuable one behind it.
+    Skewer,
+    /// The best (missed) move unveils an attack from a piece that was behind it.
+    DiscoveredAttack,
     /// The move played left a piece en prise (attacked and undefended).
     HangingPiece,
 }
@@ -48,15 +56,29 @@ pub fn classify(
         return out;
     };
 
-    // Fork: the best move the player missed lands a piece attacking 2+ targets.
-    if let Some((after_best, to)) = play(&pos, best_uci) {
+    // Concepts describing the tactic the player *missed* — derived from the
+    // position after the engine's best move.
+    if let Some((after_best, from, to)) = play(&pos, best_uci) {
+        if is_back_rank_mate(&after_best) {
+            out.push(Concept::BackRankMate);
+        }
         if is_fork(&after_best, to) {
             out.push(Concept::Fork);
         }
+        match xray(&after_best, to) {
+            Some(XRay::Pin) => out.push(Concept::Pin),
+            Some(XRay::Skewer) => out.push(Concept::Skewer),
+            None => {}
+        }
+        if let Some(from) = from {
+            if is_discovered_attack(&after_best, from) {
+                out.push(Concept::DiscoveredAttack);
+            }
+        }
     }
 
-    // Hanging piece: the move actually played leaves a piece free to be taken.
-    if let Some((after_played, _)) = play(&pos, played_uci) {
+    // Concepts describing what the move *played* did wrong (hangs material).
+    if let Some((after_played, _, _)) = play(&pos, played_uci) {
         if hangs_piece(&after_played) {
             out.push(Concept::HangingPiece);
         }
@@ -74,11 +96,12 @@ fn parse_position(fen: &str) -> Option<Chess> {
 
 /// Play a UCI move on a clone of `pos`, returning the resulting position and the
 /// destination square. `None` if the move can't be parsed or is illegal here.
-fn play(pos: &Chess, uci: &str) -> Option<(Chess, Square)> {
+fn play(pos: &Chess, uci: &str) -> Option<(Chess, Option<Square>, Square)> {
     let mv = uci.parse::<UciMove>().ok()?.to_move(pos).ok()?;
+    let from = mv.from();
     let to = mv.to();
     let next = pos.clone().play(mv).ok()?;
-    Some((next, to))
+    Some((next, from, to))
 }
 
 fn valuable(role: Role) -> bool {
@@ -103,6 +126,105 @@ fn is_fork(after: &Chess, to: Square) -> bool {
         .filter(|&sq| board.role_at(sq).is_some_and(valuable))
         .count()
         >= 2
+}
+
+fn piece_value(role: Role) -> u32 {
+    match role {
+        Role::Pawn => 1,
+        Role::Knight | Role::Bishop => 3,
+        Role::Rook => 5,
+        Role::Queen => 9,
+        Role::King => 100,
+    }
+}
+
+enum XRay {
+    Pin,
+    Skewer,
+}
+
+/// If the slider on `slider_sq` lines up two enemy pieces on one ray (the near
+/// one shielding the far one), report a pin (less valuable in front → moving it
+/// loses the piece behind) or a skewer (more valuable in front → forced to move,
+/// exposing the piece behind).
+fn xray(after: &Chess, slider_sq: Square) -> Option<XRay> {
+    let board = after.board();
+    let piece = board.piece_at(slider_sq)?;
+    if !matches!(piece.role, Role::Bishop | Role::Rook | Role::Queen) {
+        return None;
+    }
+    let occ = board.occupied();
+    let enemy = after.us();
+    // Enemy pieces the slider hits first along each ray.
+    let first_blockers = attacks::attacks(slider_sq, piece, occ) & enemy;
+    for near in first_blockers {
+        let near_value = piece_value(board.role_at(near)?);
+        for far in enemy {
+            if far == near {
+                continue;
+            }
+            // `near` directly shields `far` from the slider: they're collinear and
+            // `near` is the only piece between the slider and `far`.
+            let line = attacks::between(slider_sq, far);
+            if line.contains(near) && (line & occ) == Bitboard::from_square(near) {
+                let far_value = piece_value(board.role_at(far)?);
+                if near_value < far_value {
+                    return Some(XRay::Pin);
+                }
+                if near_value > far_value {
+                    return Some(XRay::Skewer);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// True if vacating `from` unveils a friendly slider's attack on an enemy queen,
+/// rook, or king — a discovered attack (or discovered check).
+fn is_discovered_attack(after: &Chess, from: Square) -> bool {
+    let board = after.board();
+    let occ = board.occupied();
+    let mover = after.turn().other();
+    for target in after.us() {
+        if !matches!(
+            board.role_at(target),
+            Some(Role::Queen | Role::Rook | Role::King)
+        ) {
+            continue;
+        }
+        for slider in board.attacks_to(target, mover, occ) {
+            if matches!(
+                board.role_at(slider),
+                Some(Role::Bishop | Role::Rook | Role::Queen)
+            ) && attacks::between(slider, target).contains(from)
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// True if the position is checkmate with the mated king on its own back rank.
+fn is_back_rank_mate(after: &Chess) -> bool {
+    if !after.is_checkmate() {
+        return false;
+    }
+    let board = after.board();
+    let mated = after.turn();
+    let Some(king) = after
+        .us()
+        .into_iter()
+        .find(|&sq| board.role_at(sq) == Some(Role::King))
+    else {
+        return false;
+    };
+    let back_rank = match mated {
+        Color::White => Rank::First,
+        Color::Black => Rank::Eighth,
+    };
+    king.rank() == back_rank
 }
 
 /// True if a minor-or-better piece of the side that just moved is attacked by the
@@ -162,6 +284,58 @@ mod tests {
             Score::Cp(0),
         );
         assert!(c.contains(&Concept::HangingPiece));
+    }
+
+    #[test]
+    fn detects_pin() {
+        // Bf1-b5 pins the c6 knight to the e8 king (knight in front, king behind).
+        let c = classify(
+            "4k3/8/2n5/8/8/8/8/4KB2 w - - 0 1",
+            "f1b5",
+            "e1e2",
+            Score::Cp(0),
+            Score::Cp(0),
+        );
+        assert!(c.contains(&Concept::Pin), "{c:?}");
+    }
+
+    #[test]
+    fn detects_skewer() {
+        // Rb1-a1 skewers the a5 king to the a8 queen (king in front, queen behind).
+        let c = classify(
+            "q7/8/8/k7/8/8/8/1R2K3 w - - 0 1",
+            "b1a1",
+            "e1e2",
+            Score::Cp(0),
+            Score::Cp(0),
+        );
+        assert!(c.contains(&Concept::Skewer), "{c:?}");
+    }
+
+    #[test]
+    fn detects_discovered_attack() {
+        // Na4-c5 unveils the a1 rook's attack on the a8 queen.
+        let c = classify(
+            "q3k3/8/8/8/N7/8/8/R3K3 w - - 0 1",
+            "a4c5",
+            "e1e2",
+            Score::Cp(0),
+            Score::Cp(0),
+        );
+        assert!(c.contains(&Concept::DiscoveredAttack), "{c:?}");
+    }
+
+    #[test]
+    fn detects_back_rank_mate() {
+        // Re1-e8# with the black king boxed in by its own f7/g7/h7 pawns.
+        let c = classify(
+            "6k1/5ppp/8/8/8/8/8/4R1K1 w - - 0 1",
+            "e1e8",
+            "g1f1",
+            Score::Cp(0),
+            Score::Cp(0),
+        );
+        assert!(c.contains(&Concept::BackRankMate), "{c:?}");
     }
 
     #[test]

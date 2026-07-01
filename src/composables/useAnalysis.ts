@@ -7,12 +7,23 @@ export type Severity = "best" | "good" | "inaccuracy" | "mistake" | "blunder";
 export type Score = { kind: "cp"; value: number } | { kind: "mate"; value: number };
 
 /** Tactical themes a mistake can be tagged with (mirrors `gambit_engine::Concept`). */
-export type Concept = "missed_mate" | "fork" | "hanging_piece";
+export type Concept =
+  | "missed_mate"
+  | "back_rank_mate"
+  | "fork"
+  | "pin"
+  | "skewer"
+  | "discovered_attack"
+  | "hanging_piece";
 
 /** Short human labels for each concept, shown as chips on the mistake. */
 export const CONCEPT_LABELS: Record<Concept, string> = {
   missed_mate: "Missed mate",
+  back_rank_mate: "Missed back-rank mate",
   fork: "Missed a fork",
+  pin: "Missed a pin",
+  skewer: "Missed a skewer",
+  discovered_attack: "Missed a discovered attack",
   hanging_piece: "Hangs a piece",
 };
 
