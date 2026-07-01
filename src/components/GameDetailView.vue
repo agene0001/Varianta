@@ -131,6 +131,57 @@ const boardView = computed(() => {
   return { fen, shapes: [] as Array<Record<string, string>> };
 });
 
+// Which step of the previewed engine line is on the board (null = the selection).
+const previewIndex = ref<number | null>(null);
+
+// The engine's recommended continuation for the current mistake, played out from
+// the position before the move into clickable SAN steps.
+const pvLine = computed(() => {
+  const c = current.value;
+  if (!c?.best_line?.length) return [];
+  if (c.severity !== 'mistake' && c.severity !== 'blunder') return [];
+  const chess = new Chess(c.fen);
+  const steps: { san: string; fen: string; prefix: string; orig: string; dest: string }[] = [];
+  for (let i = 0; i < c.best_line.length; i++) {
+    const uci = c.best_line[i];
+    const whiteToMove = chess.turn() === 'w';
+    const moveNo = chess.moveNumber();
+    let m;
+    try {
+      m = chess.move({
+        from: uci.slice(0, 2),
+        to: uci.slice(2, 4),
+        promotion: uci.slice(4) || undefined,
+      });
+    } catch {
+      break;
+    }
+    steps.push({
+      san: m.san,
+      fen: chess.fen(),
+      prefix: whiteToMove ? `${moveNo}.` : i === 0 ? `${moveNo}…` : '',
+      orig: uci.slice(0, 2),
+      dest: uci.slice(2, 4),
+    });
+  }
+  return steps;
+});
+
+function togglePreview(i: number) {
+  previewIndex.value = previewIndex.value === i ? null : i;
+}
+
+// What the board actually shows: a previewed line step if one is active, else the
+// selected move's position.
+const displayView = computed(() => {
+  const i = previewIndex.value;
+  const step = i !== null ? pvLine.value[i] : null;
+  if (step) {
+    return { fen: step.fen, shapes: [{ orig: step.orig, dest: step.dest, brush: 'blue' }] };
+  }
+  return boardView.value;
+});
+
 // Only the initial config; live updates go through the API below.
 const boardConfig = computed<any>(() => ({
   fen: boardView.value.fen,
@@ -144,8 +195,8 @@ let boardApi: any = null;
 
 function applyBoardView() {
   if (!boardApi) return;
-  boardApi.setPosition(boardView.value.fen);
-  boardApi.setShapes(boardView.value.shapes);
+  boardApi.setPosition(displayView.value.fen);
+  boardApi.setShapes(displayView.value.shapes);
 }
 
 function onBoardCreated(api: any) {
@@ -153,7 +204,11 @@ function onBoardCreated(api: any) {
   applyBoardView();
 }
 
-watch(boardView, applyBoardView);
+watch(displayView, applyBoardView);
+// Leaving a mistake drops any previewed line so the next move starts clean.
+watch(selected, () => {
+  previewIndex.value = null;
+});
 
 const barPct = computed(() => (current.value ? whiteBarPct(current.value) : 50));
 const evalText = computed(() => (current.value ? evalLabel(current.value) : '0.0'));
@@ -251,6 +306,18 @@ const movePairs = computed<MoveRow[]>(() => {
             :key="c"
             class="concept-chip"
           >{{ CONCEPT_LABELS[c] }}</span>
+        </div>
+
+        <!-- Engine's recommended line — click a move to step the board through it. -->
+        <div v-if="pvLine.length" class="pv-line">
+          <span class="pv-label">Line</span>
+          <span
+            v-for="(s, i) in pvLine"
+            :key="i"
+            class="pv-move"
+            :class="{ active: previewIndex === i }"
+            @click="togglePreview(i)"
+          ><span v-if="s.prefix" class="pv-num">{{ s.prefix }}</span>{{ s.san }}</span>
         </div>
       </div>
 
@@ -581,6 +648,53 @@ const movePairs = computed<MoveRow[]>(() => {
 .cp-loss {
   color: #ff8a8a;
   margin-left: 4px;
+}
+
+.pv-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  padding: 8px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.pv-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-right: 2px;
+}
+
+.pv-move {
+  cursor: pointer;
+  padding: 1px 5px;
+  border-radius: 5px;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.pv-move:hover {
+  background: var(--bg-card-hover);
+}
+
+.pv-move.active {
+  background: var(--grad-primary);
+  color: #05060d;
+  font-weight: 700;
+}
+
+.pv-num {
+  color: var(--text-muted);
+  margin-right: 3px;
+}
+
+.pv-move.active .pv-num {
+  color: #05060d;
 }
 
 .concept-chip {

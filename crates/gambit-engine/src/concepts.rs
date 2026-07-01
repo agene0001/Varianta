@@ -36,6 +36,12 @@ pub enum Concept {
     CreatedWeakPawn,
     /// The move played left a piece passive (much lower mobility than the best move).
     PassivePiece,
+    /// The move played surrendered control of squares in the opponent's half.
+    LostSpace,
+    /// The move played gave up a rook's open/semi-open file.
+    GaveUpFile,
+    /// The move played conceded a passed pawn (created the opponent one, or lost yours).
+    AllowedPasser,
 }
 
 /// Classify a single move's mistake into zero or more [`Concept`]s.
@@ -246,11 +252,62 @@ fn is_back_rank_mate(after: &Chess) -> bool {
 }
 
 /// Cheap positional metrics for the side that just moved (`them()` after the
-/// move). Higher `king_danger`/`weak_pawns` is worse; higher `mobility` is better.
+/// move). Higher `king_danger`/`weak_pawns` is worse; higher `mobility`/`space`/
+/// `rook_files`/`passed` is better.
 struct Features {
     king_danger: i32,
     weak_pawns: i32,
     mobility: i32,
+    space: i32,
+    rook_files: i32,
+    enemy_passers: i32,
+}
+
+/// All squares strictly ahead of `rank` in `color`'s promotion direction.
+fn ranks_ahead(color: Color, rank: Rank) -> Bitboard {
+    Rank::ALL
+        .iter()
+        .filter(|&&r| match color {
+            Color::White => r > rank,
+            Color::Black => r < rank,
+        })
+        .fold(Bitboard::EMPTY, |acc, &r| acc | Bitboard::from_rank(r))
+}
+
+/// The opponent's half of the board from `color`'s point of view.
+fn enemy_half(color: Color) -> Bitboard {
+    Rank::ALL
+        .iter()
+        .filter(|&&r| match color {
+            Color::White => r >= Rank::Fifth,
+            Color::Black => r <= Rank::Fourth,
+        })
+        .fold(Bitboard::EMPTY, |acc, &r| acc | Bitboard::from_rank(r))
+}
+
+/// A mask of `file` together with its neighbouring files.
+fn file_and_adjacent(file: File) -> Bitboard {
+    let i = File::ALL.iter().position(|&f| f == file).unwrap();
+    let mut bb = Bitboard::from_file(file);
+    if let Some(j) = i.checked_sub(1) {
+        bb |= Bitboard::from_file(File::ALL[j]);
+    }
+    if let Some(&f) = File::ALL.get(i + 1) {
+        bb |= Bitboard::from_file(f);
+    }
+    bb
+}
+
+/// Count pawns of `color` with no enemy pawn on their file or the adjacent files
+/// ahead of them — i.e. passed pawns.
+fn passed_pawns(pawns: Bitboard, enemy_pawns: Bitboard, color: Color) -> i32 {
+    pawns
+        .into_iter()
+        .filter(|&sq| {
+            let span = file_and_adjacent(sq.file()) & ranks_ahead(color, sq.rank());
+            (enemy_pawns & span).is_empty()
+        })
+        .count() as i32
 }
 
 fn features(after: &Chess) -> Features {
@@ -258,7 +315,13 @@ fn features(after: &Chess) -> Features {
     let occ = board.occupied();
     let mover = after.them();
     let enemy_color = after.turn();
+    let mover_color = enemy_color.other();
     let pawns: Bitboard = mover
+        .into_iter()
+        .filter(|&sq| board.role_at(sq) == Some(Role::Pawn))
+        .collect();
+    let enemy_pawns: Bitboard = after
+        .us()
         .into_iter()
         .filter(|&sq| board.role_at(sq) == Some(Role::Pawn))
         .collect();
@@ -305,7 +368,9 @@ fn features(after: &Chess) -> Features {
     }
 
     // Piece activity: pseudo-mobility (attacked non-own squares) of minors/majors.
+    // Also count rooks sitting on open/semi-open (no friendly pawn) files.
     let mut mobility = 0;
+    let mut rook_files = 0;
     for sq in mover {
         if let Some(piece) = board.piece_at(sq) {
             if matches!(
@@ -314,13 +379,31 @@ fn features(after: &Chess) -> Features {
             ) {
                 mobility += (attacks::attacks(sq, piece, occ) & !mover).count() as i32;
             }
+            if piece.role == Role::Rook && (pawns & Bitboard::from_file(sq.file())).is_empty() {
+                rook_files += 1;
+            }
         }
     }
+
+    // Space: enemy-half squares controlled by the mover's pawns (kept pawn-only so
+    // it measures something distinct from piece mobility above).
+    let pawn_coverage = pawns
+        .into_iter()
+        .fold(Bitboard::EMPTY, |acc, sq| {
+            acc | attacks::pawn_attacks(mover_color, sq)
+        });
+    let space = (pawn_coverage & enemy_half(mover_color)).count() as i32;
+
+    // Opponent's passed pawns (higher = worse for the mover).
+    let enemy_passers = passed_pawns(enemy_pawns, pawns, enemy_color);
 
     Features {
         king_danger,
         weak_pawns,
         mobility,
+        space,
+        rook_files,
+        enemy_passers,
     }
 }
 
@@ -334,6 +417,9 @@ fn positional_concept(after_best: &Chess, after_played: &Chess) -> Option<Concep
     let axes = [
         (Concept::WeakenedKing, played.king_danger - best.king_danger, 2),
         (Concept::CreatedWeakPawn, played.weak_pawns - best.weak_pawns, 1),
+        (Concept::GaveUpFile, best.rook_files - played.rook_files, 1),
+        (Concept::AllowedPasser, played.enemy_passers - best.enemy_passers, 1),
+        (Concept::LostSpace, best.space - played.space, 2),
         (Concept::PassivePiece, best.mobility - played.mobility, 4),
     ];
     axes.into_iter()
@@ -495,6 +581,46 @@ mod tests {
             Score::Cp(0),
         );
         assert!(c.contains(&Concept::PassivePiece), "{c:?}");
+    }
+
+    #[test]
+    fn detects_gave_up_file() {
+        // Rd1 sits on the open d-file; Rd1-c1 abandons it for the c-pawn's file.
+        // (Best a2a3 keeps the rook on the open file.)
+        let c = classify(
+            "6k1/8/8/8/3p4/8/PPP5/3R2K1 w - - 0 1",
+            "a2a3",
+            "d1c1",
+            Score::Cp(0),
+            Score::Cp(0),
+        );
+        assert!(c.contains(&Concept::GaveUpFile), "{c:?}");
+    }
+
+    #[test]
+    fn detects_lost_space() {
+        // e2e4 grabs central space (controls d5/f5); a2a3 grabs none.
+        let c = classify(
+            "6k1/8/8/8/8/8/P3P3/6K1 w - - 0 1",
+            "e2e4",
+            "a2a3",
+            Score::Cp(0),
+            Score::Cp(0),
+        );
+        assert!(c.contains(&Concept::LostSpace), "{c:?}");
+    }
+
+    #[test]
+    fn detects_allowed_passer() {
+        // d2d4 rushes past the c4 pawn, making it passed; d2d3 keeps it blockaded.
+        let c = classify(
+            "6k1/8/8/8/2p5/8/3P4/6K1 w - - 0 1",
+            "d2d3",
+            "d2d4",
+            Score::Cp(0),
+            Score::Cp(0),
+        );
+        assert!(c.contains(&Concept::AllowedPasser), "{c:?}");
     }
 
     #[test]

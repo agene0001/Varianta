@@ -280,6 +280,11 @@ pub struct MoveAnalysis {
     /// `#[serde(default)]` for analyses stored before classification existed.
     #[serde(default)]
     pub concepts: Vec<Concept>,
+    /// Engine's principal variation (recommended continuation) in UCI moves,
+    /// starting from this position — populated only for mistakes/blunders.
+    /// `#[serde(default)]` for analyses stored before this field existed.
+    #[serde(default)]
+    pub best_line: Vec<String>,
 }
 
 /// Collapse a score to a centipawn number for comparison. Mates map to large
@@ -367,8 +372,10 @@ impl UciEngine {
             };
 
             let severity = classify(cp_loss, played_is_best);
-            // Classify the *why* only when the move actually went wrong.
-            let move_concepts = if matches!(severity, Severity::Mistake | Severity::Blunder) {
+            let is_error = matches!(severity, Severity::Mistake | Severity::Blunder);
+            // Classify the *why* — and keep the recommended line — only when the
+            // move actually went wrong.
+            let move_concepts = if is_error {
                 concepts::classify(
                     &step.fen_before,
                     &best_uci,
@@ -376,6 +383,11 @@ impl UciEngine {
                     before.score,
                     eval_after,
                 )
+            } else {
+                Vec::new()
+            };
+            let best_line = if is_error {
+                before.pv.iter().take(12).cloned().collect()
             } else {
                 Vec::new()
             };
@@ -393,6 +405,7 @@ impl UciEngine {
                 cp_loss,
                 severity,
                 concepts: move_concepts,
+                best_line,
             });
         }
         Ok(out)

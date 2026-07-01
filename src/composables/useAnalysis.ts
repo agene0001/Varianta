@@ -17,7 +17,10 @@ export type Concept =
   | "hanging_piece"
   | "weakened_king"
   | "created_weak_pawn"
-  | "passive_piece";
+  | "passive_piece"
+  | "lost_space"
+  | "gave_up_file"
+  | "allowed_passer";
 
 /** Short human labels for each concept, shown as chips on the mistake. */
 export const CONCEPT_LABELS: Record<Concept, string> = {
@@ -31,6 +34,9 @@ export const CONCEPT_LABELS: Record<Concept, string> = {
   weakened_king: "Weakened king",
   created_weak_pawn: "Weak pawn",
   passive_piece: "Passive piece",
+  lost_space: "Lost space",
+  gave_up_file: "Gave up a file",
+  allowed_passer: "Allowed a passer",
 };
 
 /** A compact glyph per concept, for at-a-glance markers in the move list. */
@@ -45,6 +51,9 @@ export const CONCEPT_ICONS: Record<Concept, string> = {
   weakened_king: "🛡️",
   created_weak_pawn: "♟️",
   passive_piece: "🐌",
+  lost_space: "🗺️",
+  gave_up_file: "🚪",
+  allowed_passer: "🏃",
 };
 
 /** Mirrors `gambit_engine::MoveAnalysis` (serde snake_case). */
@@ -64,6 +73,8 @@ export interface MoveAnalysis {
   severity: Severity;
   /** Tactical themes for the mistake (empty for non-mistakes / old analyses). */
   concepts: Concept[];
+  /** Engine's recommended continuation (UCI), for mistakes/blunders. */
+  best_line: string[];
 }
 
 /** A game's stored analysis, or null if it hasn't been analyzed. */
