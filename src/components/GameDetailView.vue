@@ -45,6 +45,7 @@ onMounted(async () => {
   resizeObserver = new ResizeObserver(updateBoardSize);
   if (boardArea.value) resizeObserver.observe(boardArea.value);
   window.addEventListener('resize', updateBoardSize); // ResizeObserver misses height-only changes
+  window.addEventListener('keydown', onKey);
   updateBoardSize();
   try {
     analyses.value = await getGameAnalysis(props.game.id);
@@ -57,6 +58,8 @@ onMounted(async () => {
 onUnmounted(() => {
   resizeObserver?.disconnect();
   window.removeEventListener('resize', updateBoardSize);
+  window.removeEventListener('keydown', onKey);
+  stopLine();
 });
 
 async function onAnalyze() {
@@ -171,6 +174,65 @@ function togglePreview(i: number) {
   previewIndex.value = previewIndex.value === i ? null : i;
 }
 
+// Auto-play the engine line, stepping one move at a time.
+const playing = ref(false);
+let playTimer: number | null = null;
+function stopLine() {
+  if (playTimer !== null) {
+    clearInterval(playTimer);
+    playTimer = null;
+  }
+  playing.value = false;
+}
+function playLine() {
+  if (playing.value) {
+    stopLine();
+    return;
+  }
+  if (!pvLine.value.length) return;
+  previewIndex.value = 0;
+  playing.value = true;
+  playTimer = window.setInterval(() => {
+    if (previewIndex.value === null || previewIndex.value >= pvLine.value.length - 1) {
+      stopLine();
+    } else {
+      previewIndex.value = previewIndex.value + 1;
+    }
+  }, 850);
+}
+
+// The selected move is a mistake, but its analysis predates the stored line.
+const showLineHint = computed(() => {
+  const c = current.value;
+  return (
+    !!c &&
+    (c.severity === 'mistake' || c.severity === 'blunder') &&
+    !c.best_line?.length
+  );
+});
+
+// ←/→ steps the engine line while previewing it, otherwise walks the game moves.
+function onKey(e: KeyboardEvent) {
+  if (!analyses.value?.length) return;
+  if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    if (previewIndex.value !== null) {
+      previewIndex.value = Math.min(previewIndex.value + 1, pvLine.value.length - 1);
+    } else {
+      selected.value = Math.min(selected.value + 1, analyses.value.length - 1);
+    }
+  } else if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    if (previewIndex.value !== null) {
+      previewIndex.value = previewIndex.value > 0 ? previewIndex.value - 1 : null;
+    } else {
+      selected.value = Math.max(selected.value - 1, 0);
+    }
+  } else if (e.key === 'Escape') {
+    previewIndex.value = null;
+  }
+}
+
 // What the board actually shows: a previewed line step if one is active, else the
 // selected move's position.
 const displayView = computed(() => {
@@ -208,6 +270,7 @@ watch(displayView, applyBoardView);
 // Leaving a mistake drops any previewed line so the next move starts clean.
 watch(selected, () => {
   previewIndex.value = null;
+  stopLine();
 });
 
 const barPct = computed(() => (current.value ? whiteBarPct(current.value) : 50));
@@ -308,9 +371,12 @@ const movePairs = computed<MoveRow[]>(() => {
           >{{ CONCEPT_LABELS[c] }}</span>
         </div>
 
-        <!-- Engine's recommended line — click a move to step the board through it. -->
+        <!-- Engine's recommended line — click a move (or ▶ / ← →) to step through it. -->
         <div v-if="pvLine.length" class="pv-line">
-          <span class="pv-label">Line</span>
+          <button class="pv-play" :title="playing ? 'Pause' : 'Play line'" @click="playLine">
+            {{ playing ? '⏸' : '▶' }}
+          </button>
+          <span class="pv-label">Engine line</span>
           <span
             v-for="(s, i) in pvLine"
             :key="i"
@@ -318,6 +384,9 @@ const movePairs = computed<MoveRow[]>(() => {
             :class="{ active: previewIndex === i }"
             @click="togglePreview(i)"
           ><span v-if="s.prefix" class="pv-num">{{ s.prefix }}</span>{{ s.san }}</span>
+        </div>
+        <div v-else-if="showLineHint" class="pv-hint">
+          ↻ Re-analyze this game to see the engine's full line here.
         </div>
       </div>
 
@@ -662,12 +731,40 @@ const movePairs = computed<MoveRow[]>(() => {
   font-size: 13px;
 }
 
+.pv-play {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--btn-bg);
+  color: var(--text-primary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.pv-play:hover {
+  background: var(--bg-card-hover);
+}
+
 .pv-label {
   color: var(--text-muted);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-right: 2px;
+}
+
+.pv-hint {
+  padding: 8px 12px;
+  background: var(--bg-card);
+  border: 1px dashed var(--border-color);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .pv-move {
