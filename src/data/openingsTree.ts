@@ -89,7 +89,8 @@ const italianTrunk: TreeMove[] = [
                           { san: "Ng5", description: "Black aggressively pushed f5! Jump your knight to g5, eyeing f7 and the weak e6 square." },
                           { san: "f4", description: "Black pushes f4 to gain space." },
                           { san: "Nf7", description: "Black ignored the threat. Play Nf7 to fork the queen and rook!" },
-                          { san: "Bxf7+", description: "Black plays a tactical shot." },
+                          { san: "Bb4+", description: "Black can't save both: ...Kxf7 is illegal (your Bc4 covers f7), so Black lashes out with a desperation check." },
+                          { san: "c3", description: "Black played Bb4+. Block with c3, hitting the bishop. Black must deal with it while your knight collects the h8 rook — you're winning the exchange and a pawn." },
                         ),
                       },
                       {
@@ -100,10 +101,13 @@ const italianTrunk: TreeMove[] = [
                         variations: line(
                           { san: "d3", description: "Black attacks your center with f5. Play solidly with d3." },
                           { san: "Nge7", description: "Black flexibly develops their knight to e7." },
-                          { san: "exf5", description: "Black played Ne7. Capture the f5 pawn with exf5." },
-                          { san: "d5", description: "Black advances in the center with d5." },
-                          { san: "Bb3", description: "Black pushed d5. Retreat your bishop to b3." },
-                          { san: "Nxf5", description: "Black recaptures the pawn with the knight." },
+                          { san: "Nc3", description: "Black played Ne7. Don't rush exf5 — it releases the tension and lets Black equalize. Develop with Nc3, keeping the bind and leaving Black's loose f5/e5 pawns to worry about." },
+                          { san: "Na5", description: "Black tries to trade off your strong Italian bishop with Na5." },
+                          { san: "Nxe5", description: "Black played Na5, abandoning e5. Punish it immediately with Nxe5, snatching the pawn." },
+                          { san: "Nxc4", description: "Black takes your bishop on c4." },
+                          { san: "Nxc4", description: "Black traded on c4. Recapture with the knight — you're a clean pawn up with the better structure." },
+                          { san: "fxe4", description: "Black regains a pawn with fxe4." },
+                          { san: "O-O", description: "Black played fxe4. Castle. Your knights dominate the open position and Black's shattered kingside gives you a lasting edge (about +2.5)." },
                         ),
                       },
                       {
@@ -248,9 +252,10 @@ const queensGambitTree: TreeMove[] = [
   },
 ];
 
-// ─── Ruy López ───────────────────────────────────────────────
+// ─── Anti-Scandinavian (White) ───────────────────────────────
 // White's reply when a 1.e4 opponent answers with the Scandinavian (1...d5).
-// Grafted into the Ruy López repertoire below as a branch off 1.e4.
+// Its own opening rather than a Ruy López branch: 1...d5 is ~8.9% of Black's
+// replies to 1.e4, and the lines share no moves with the Ruy López.
 const antiScandinavianBranch: TreeMove = {
   san: "d5",
   description: "Black answers with the Scandinavian Defense (Center Counter), striking at your e4 pawn at once.",
@@ -362,7 +367,9 @@ const antiScandinavianBranch: TreeMove = {
                     { san: "Nc6", description: "Black develops the knight to c6." },
                     { san: "c4", description: "Black played Nc6. Gain space and hit the queen with c4." },
                     { san: "Qd8", description: "Black retreats the queen to d8." },
-                    { san: "Nc3", description: "Black retreated. Develop Nc3; with your big c4–d4 center and faster development, you stand pleasantly even though material is level." },
+                    { san: "d5", description: "Black retreated. Push d5! — kicking the knight before Black gets ...e6 in is far stronger than the routine Nc3, which lets Black free the position." },
+                    { san: "Nb8", description: "The knight has to crawl back to b8." },
+                    { san: "O-O", description: "Black's knight retreated to b8. Castle. Black has lost all coordination while you have a protected passed d-pawn and a big lead in development (about +1.9)." },
                   ),
                 },
               ],
@@ -527,8 +534,16 @@ const ruyLopezTree: TreeMove[] = [
           },
         ],
       },
-      antiScandinavianBranch,
     ],
+  },
+];
+
+/** Anti-Scandinavian as its own opening: 1.e4 with Black's 1...d5 reply. */
+const antiScandinavianTree: TreeMove[] = [
+  {
+    san: "e4",
+    description: "Open with e4.",
+    variations: [antiScandinavianBranch],
   },
 ];
 
@@ -550,6 +565,23 @@ const sicilianTree: TreeMove[] = [
                 san: "d6",
                 description: "White played Nf3. Play d6 to prepare your center and prevent e5.",
                 variations: [
+                  {
+                    san: "Bb5+",
+                    description: "White gives the Moscow check with Bb5+ — another way of dodging the Open Sicilian. You need a ready answer here too.",
+                    lineName: "Moscow (3.Bb5+)",
+                    lineDescription: "Block with the bishop, recapture with the queen, and play a solid, comfortable game.",
+                    variations: line(
+                      { san: "Bd7", description: "White checked with Bb5+. Block with Bd7 — the cleanest reply. Blocking with ...Nd7 or ...Nc6 leaves your pieces more tangled." },
+                      { san: "Bxd7+", description: "White trades on d7." },
+                      { san: "Qxd7", description: "White played Bxd7+. Recapture with the queen! It's more active than ...Nxd7 and keeps the b8 knight free to develop to c6." },
+                      { san: "O-O", description: "White castles kingside." },
+                      { san: "Nf6", description: "White castled. Develop Nf6, hitting the e4 pawn and getting ready to castle yourself." },
+                      { san: "Re1", description: "White supports e4 with the rook." },
+                      { san: "Nc6", description: "White played Re1. Develop the last knight to c6, where it controls d4 and eyes the queenside." },
+                      { san: "c3", description: "White plays c3, preparing d4." },
+                      { san: "e6", description: "White played c3. Play e6 — a solid setup that blunts the d4 push and prepares ...Be7 and castling. Light-squared bishops are off, so your remaining pieces have easy squares." },
+                    ),
+                  },
                   {
                     san: "d4",
                     description: "White pushes for central control with d4.",
@@ -637,20 +669,112 @@ const sicilianTree: TreeMove[] = [
               {
                 san: "Nc6",
                 description: "White played Nf3. Develop your knight to c6, preparing the sharp Sveshnikov complex.",
-                lineName: "Sveshnikov Variation",
-                lineDescription: "The dynamic Sveshnikov / Lasker-Pelikan",
-                variations: line(
-                  { san: "d4", description: "White opens the center with d4." },
-                  { san: "cxd4", description: "White played d4. Exchange pawns with cxd4." },
-                  { san: "Nxd4", description: "White recaptures with the knight." },
-                  { san: "Nf6", description: "White recaptured. Develop to f6, attacking e4." },
-                  { san: "Nc3", description: "White defends e4 with Nc3." },
-                  { san: "e5", description: "White defended e4. Strike the center with e5, the defining Sveshnikov move — accepting a backward d-pawn for huge piece activity." },
-                  { san: "Ndb5", description: "White jumps the knight to b5, eyeing d6." },
-                  { san: "d6", description: "White attacked d6. Defend with d6 — the standard Sveshnikov main line." },
-                ),
+                variations: [
+                  {
+                    san: "d4",
+                    description: "White opens the center with d4, entering the Open Sicilian.",
+                    lineName: "Sveshnikov Variation",
+                    lineDescription: "The dynamic Sveshnikov / Lasker-Pelikan",
+                    variations: line(
+                      { san: "cxd4", description: "White played d4. Exchange pawns with cxd4." },
+                      { san: "Nxd4", description: "White recaptures with the knight." },
+                      { san: "Nf6", description: "White recaptured. Develop to f6, attacking e4." },
+                      { san: "Nc3", description: "White defends e4 with Nc3." },
+                      { san: "e5", description: "White defended e4. Strike the center with e5, the defining Sveshnikov move — accepting a backward d-pawn for huge piece activity." },
+                      { san: "Ndb5", description: "White jumps the knight to b5, eyeing d6." },
+                      { san: "d6", description: "White attacked d6. Defend with d6 — the standard Sveshnikov main line." },
+                    ),
+                  },
+                  {
+                    san: "Bb5",
+                    description: "White plays the Rossolimo — declining the Open Sicilian entirely. This is 13% of games after 2...Nc6, so you need an answer or you're out of book on move three.",
+                    lineName: "Rossolimo (3.Bb5)",
+                    lineDescription: "White ducks the Open Sicilian. Take the bishop pair, recapture toward the centre, and set up ...e5.",
+                    variations: line(
+                      { san: "g6", description: "White played Bb5, pinning nothing but threatening to double your pawns. Fianchetto with g6 — the bishop belongs on the long diagonal and you're happy to let White trade on c6." },
+                      { san: "Bxc6", description: "White trades on c6, doubling your pawns." },
+                      { san: "dxc6", description: "White played Bxc6. Recapture with the d-pawn! Not bxc6 — dxc6 opens the d-file for your queen, frees the c8 bishop, and gives you the bishop pair as compensation for the doubled pawns." },
+                      { san: "O-O", description: "White castles." },
+                      { san: "Bg7", description: "White castled. Complete the fianchetto with Bg7; your bishop pair is the long-term trump in an open position." },
+                      { san: "d3", description: "White plays d3, keeping the position closed." },
+                      { san: "Qc7", description: "White played d3. Develop the queen to c7 — it supports the ...e5 push and eyes the half-open c-file." },
+                      { san: "Nc3", description: "White develops the knight to c3." },
+                      { san: "e5", description: "White played Nc3. Clamp the centre with e5! You have the bishop pair and a solid structure; the doubled c-pawns actually help you control d4." },
+                    ),
+                  },
+                ],
               },
             ],
+          },
+          {
+            san: "Nc3",
+            description: "White plays the Closed Sicilian with Nc3 — no d4 push at all, just a slow kingside build-up. Played 8.6% of the time.",
+            lineName: "Closed Sicilian (2.Nc3)",
+            lineDescription: "White goes for a slow kingside attack; you seize space and plant a knight on d4.",
+            variations: line(
+              { san: "Nc6", description: "White played Nc3, declining to open the centre. Develop Nc6 naturally — in a slow position you can afford normal moves." },
+              { san: "f4", description: "White plays f4, the Grand Prix setup, aiming for a kingside attack." },
+              { san: "g6", description: "White played f4 with attacking intentions. Fianchetto with g6! The bishop on g7 is your best defensive and counter-attacking piece against this setup." },
+              { san: "Nf3", description: "White develops the knight to f3." },
+              { san: "Bg7", description: "White played Nf3. Complete the fianchetto with Bg7, pointing straight at White's queenside." },
+              { san: "Bb5", description: "White pins with Bb5, hoping to trade off your c6 knight." },
+              { san: "Nd4", description: "White played Bb5. Jump in with Nd4! — a beautiful central outpost that hits the bishop and dares White to trade into a comfortable structure for you." },
+              { san: "O-O", description: "White castles kingside." },
+              { san: "e6", description: "White castled. Play e6, giving the d4 knight permanent support and preparing ...Ne7. You're comfortable here — statistically Black scores well against the Closed." },
+            ),
+          },
+          {
+            san: "f4",
+            description: "White launches straight into the Grand Prix Attack with f4, planning a fast kingside assault. Played 5.7% of the time.",
+            lineName: "Grand Prix Attack (2.f4)",
+            lineDescription: "Strike in the centre with ...d5 immediately — the most testing answer to White's flank attack.",
+            variations: line(
+              { san: "d5", description: "White played f4, committing to a kingside attack but weakening the centre and the a7–g1 diagonal. Hit back at once with d5! A flank attack is met by a central counter." },
+              { san: "e5", description: "White pushes past with e5, keeping the centre closed." },
+              { san: "Nc6", description: "White played e5. Develop Nc6, immediately pressuring the d4 square and the e5 pawn's future support." },
+              { san: "Nf3", description: "White develops the knight to f3." },
+              { san: "Bg4", description: "White played Nf3. Pin the knight with Bg4! Getting this bishop outside the pawn chain before ...e6 is the key move — otherwise it becomes a bad bishop." },
+              { san: "Be2", description: "White breaks the pin by offering a trade with Be2." },
+              { san: "e6", description: "White played Be2. Now play e6, building a solid chain. Your bishop is already outside it, so you have none of the usual French problems." },
+              { san: "O-O", description: "White castles kingside." },
+              { san: "Nh6", description: "White castled. Develop the knight via h6! It looks odd, but the knight heads for f5 where it blockades White's attack and eyes d4 — Black scores 57% from here." },
+            ),
+          },
+          {
+            san: "Bc4",
+            description: "White develops the bishop straight to c4, eyeing f7 before committing the centre. Played 8.5% — and it's White's worst-scoring try, with Black scoring 51%.",
+            lineName: "2.Bc4",
+            lineDescription: "Blunt the bishop with ...e6 and hit back with ...d5 for a comfortable game.",
+            variations: line(
+              { san: "e6", description: "White played Bc4, aiming at f7. Answer with e6! — it blocks the bishop's diagonal at once and prepares the freeing ...d5 break." },
+              { san: "Nc3", description: "White develops the knight to c3." },
+              { san: "Nf6", description: "White played Nc3. Develop Nf6, attacking e4 and gaining time." },
+              { san: "d3", description: "White defends e4 with d3, admitting the bishop is misplaced." },
+              { san: "d5", description: "White played d3. Strike with d5! You gain the centre with tempo and White's bishop has to move again." },
+              { san: "exd5", description: "White captures on d5." },
+              { san: "exd5", description: "White played exd5. Recapture with the e-pawn, opening the e-file and freeing your light-squared bishop." },
+              { san: "Bb3", description: "White retreats the bishop to b3." },
+              { san: "Nc6", description: "White played Bb3. Complete development with Nc6. You have a free game, an extra centre pawn's worth of space, and easy piece play." },
+            ),
+          },
+          {
+            san: "d4",
+            description: "White offers the Smith-Morra Gambit, sacrificing a pawn for a big lead in development. Played 7.4% of the time.",
+            lineName: "Smith-Morra Declined",
+            lineDescription: "Declining with ...Nf6 sidesteps White's entire prepared attack — accepting the pawn is what the gambiteer wants.",
+            variations: line(
+              { san: "cxd4", description: "White played d4. Take the pawn — for now." },
+              { san: "c3", description: "White offers the second pawn with c3, the Smith-Morra Gambit proper." },
+              { san: "Nf6", description: "White offered the gambit pawn. Decline it with Nf6! Taking with ...dxc3 walks into the open lines and rapid development that Morra players live for; ...Nf6 hits e4 and takes them out of their preparation immediately." },
+              { san: "e5", description: "White pushes e5 to kick your knight." },
+              { san: "Nd5", description: "White played e5. Hop to d5 — a strong central square where the knight can't easily be dislodged." },
+              { san: "cxd4", description: "White finally recaptures on d4." },
+              { san: "d6", description: "White played cxd4. Undermine the e5 pawn with d6, challenging White's centre before it gets comfortable." },
+              { san: "Nf3", description: "White develops the knight to f3." },
+              { san: "Nc6", description: "White played Nf3. Develop Nc6, adding another attacker to d4 and e5." },
+              { san: "Bc4", description: "White develops the bishop to c4, eyeing f7." },
+              { san: "e6", description: "White played Bc4. Solidify with e6, blunting the bishop. Material is level and White has none of the gambit attack they were hoping for." },
+            ),
           },
           {
             san: "c3",
@@ -1101,8 +1225,10 @@ const kingsIndianTree: TreeMove[] = [
                                                       { san: "f6", description: "White played Bg5. Kick the bishop with f6, gaining space and preparing to reroute your knight." },
                                                       { san: "Bc1", description: "White retreats all the way to c1, conceding a tempo but keeping the bishop pair." },
                                                       { san: "Nh6", description: "White retreated to c1. Reroute the knight via h6 toward f7, eyeing the kingside and supporting ...f5." },
-                                                      { san: "Nd2", description: "White repositions the knight to d2, reinforcing e4 and preparing queenside expansion." },
-                                                      { san: "Nf7", description: "White played Nd2. Complete the maneuver with Nf7, where the knight guards e5 and supports the ...f5 break." },
+                                                      { san: "Nd2", description: "White repositions the knight to d2 — natural-looking, but it drops the grip on d4 and hands you the initiative." },
+                                                      { san: "exd4", description: "White played Nd2, releasing the d4 tension. Strike at once with exd4! Completing the knight maneuver with ...Nf7 here is far too slow and throws the advantage away." },
+                                                      { san: "Nd5", description: "White jumps into d5, hitting c7." },
+                                                      { san: "a5", description: "White played Nd5. Play a5, securing c5 for your pieces and stopping b4. You're clearly better (about +1.8) with the extra central pawn and the bishop pair." },
                                                     ),
                                                   },
                                                 ],
@@ -1485,29 +1611,66 @@ const petrovTree: TreeMove[] = [
                                             ),
                                           },
                                           {
-                                            san: "h3",
-                                            description: "White plays h3 to deny your knight the g4 square.",
-                                            lineName: "Stafford: 6.h3",
-                                            lineDescription: "Black develops harmoniously and castles long for the attack.",
-                                            variations: line(
-                                              { san: "Bd7", description: "White played h3. Develop the bishop to d7, preparing to castle queenside and put rooks on the open central files." },
-                                              { san: "Nc3", description: "White develops the knight to c3." },
-                                              { san: "Qe7", description: "White played Nc3. Centralize the queen on e7, eyeing the open e-file and supporting queenside castling." },
-                                              { san: "Be2", description: "White completes development with Be2." },
-                                              { san: "O-O-O", description: "White played Be2. Castle queenside (O-O-O) — your pieces are ideally placed and you have full compensation for the pawn." },
-                                            ),
+                                            san: "Be3",
+                                            description: "White offers a trade with Be3, challenging your best-placed piece. This is 13% of games here — the third most common try.",
+                                            variations: [
+                                              {
+                                                san: "Bxe3",
+                                                description: "White played Be3, offering to trade off your active bishop. Take it — Bxe3! White must recapture with the f-pawn, permanently doubling the e-pawns and stripping the cover from the king.",
+                                                variations: [
+                                                  {
+                                                    san: "fxe3",
+                                                    description: "White recaptures with the f-pawn, as they must — the structure is now badly damaged. You have two ways to play this: the solid ...Qd6, or the sharp ...Ng4 trap.",
+                                                    variations: [
+                                                      {
+                                                        san: "Qd6",
+                                                        description: "White played fxe3. Centralize with Qd6 — the solid choice. The queen eyes the weak e-pawns and the h2–b8 diagonal, and this is sound against anything White plays.",
+                                                        lineName: "Stafford: 6.Be3",
+                                                        lineDescription: "The sound treatment. Doubling White's e-pawns gives Black the most playable structure of any 6th move — about -0.5, and it works against every White reply.",
+                                                        variations: line(
+                                                          { san: "Be2", description: "White develops the bishop to e2." },
+                                                          { san: "h5", description: "White played Be2. Play h5, clamping g4 and preparing to swing the rook along the third rank or open the h-file." },
+                                                          { san: "Nc3", description: "White develops the knight to c3." },
+                                                          { san: "Ng4", description: "White played Nc3. Jump to g4! With the f-pawn gone the knight is a permanent nuisance, hitting the e3 pawn and eyeing e5. You're only about half a pawn worse — comfortably the best of White's serious 6th moves." },
+                                                        ),
+                                                      },
+                                                      {
+                                                        san: "Ng4",
+                                                        description: "White played fxe3. The sharp alternative: Ng4! immediately, hitting the e3 pawn and daring White's king to step into trouble. WARNING — this is a genuine gamble, not a free win. If White finds 8.Qf4! you are about a pawn and a half worse. Play it when you want to fight; play ...Qd6 when you want safety.",
+                                                        lineName: "Stafford: 6.Be3 Trap",
+                                                        lineDescription: "A double-edged trap. If White walks into 9.Kd2? you win material with the only-move ...Qe5!. If White finds 8.Qf4! instead, you are worse — a gamble, clearly signposted.",
+                                                        variations: line(
+                                                          { san: "Qf3", description: "White defends e3 and develops with Qf3 — played 76% of the time. (The refutation was 8.Qf4!, which leaves you about -1.4. Most players don't find it.)" },
+                                                          { san: "Qg5", description: "White played Qf3. Pile on with Qg5! — attacking the e3 pawn a second time and eyeing g2. White's king has nowhere comfortable to go." },
+                                                          { san: "Kd2", description: "White defends e3 by walking the king to d2 — played 43% of the time, and it's the mistake you're hoping for." },
+                                                          { san: "Nxh2", description: "White played Kd2?. Now snap off h2 — Nxh2! It looks like you're just losing the knight to Rxh2, and that's exactly why it works." },
+                                                          { san: "Rxh2", description: "White takes the knight with Rxh2, apparently winning a piece." },
+                                                          { san: "Qe5", description: "White played Rxh2. Here it is — Qe5!! and this is the ONLY move that works (everything else loses by four pawns). It forks the h2 rook and the b2 pawn, and White cannot defend both." },
+                                                          { san: "Rh1", description: "White saves the rook with Rh1." },
+                                                          { san: "Qxb2", description: "White played Rh1. Collect with Qxb2, hitting the a1 rook next." },
+                                                          { san: "Nc3", description: "White blocks with Nc3, trying to trap your queen." },
+                                                          { san: "Qxa1", description: "White played Nc3. Take the rook anyway — Qxa1! Your queen gets out via b2 or a5. You're up the exchange and a pawn (about +1.1) with the safer king." },
+                                                        ),
+                                                      },
+                                                    ],
+                                                  },
+                                                ],
+                                              },
+                                            ],
                                           },
                                           {
                                             san: "Nc3",
                                             description: "White develops the knight to c3, defending e4.",
                                             lineName: "Stafford: 6.Nc3",
-                                            lineDescription: "White develops soundly (Nc3, Be2, 0-0) and holds the extra pawn; Black expands on the queenside for practical activity but is objectively a touch worse.",
+                                            lineDescription: "6.Nc3?! is a mistake: ...Ng4! hits f2 immediately and Black comes out a pawn up with the bishop pair — the best result the Stafford gets against any 6th move.",
                                             variations: line(
-                                              { san: "O-O", description: "White played Nc3. Castle (O-O) and get ready to bring a rook to the open e-file." },
-                                              { san: "Be2", description: "White develops the bishop to e2." },
-                                              { san: "Re8", description: "White played Be2. Swing the rook to e8, seizing the open e-file and piling up behind the e4 pawn." },
-                                              { san: "O-O", description: "White castles." },
-                                              { san: "b5", description: "White castled. Expand with b5!, planning ...a5 and ...b4 to chase the c3-knight and ...Ba6 to trade off White's good bishop. You're still down the gambit pawn and slightly worse, but this active plan is your best practical try. (Do NOT play ...Bg4 here — it hangs a piece to Bxg4 Nxg4 Qxg4, since nothing defends g4 without ...h5 first.)" },
+                                              { san: "Ng4", description: "White played Nc3, ignoring your threats. Strike at once with Ng4! — f2 is attacked twice (knight and bishop) and White has no comfortable way to defend it. Don't castle here: the slow 6...O-O lets White consolidate and leaves you nearly two pawns worse." },
+                                              { san: "Be3", description: "White defends f2 the only real way, blocking with Be3." },
+                                              { san: "Nxe3", description: "White played Be3. Take it — Nxe3 forces the issue, since recapturing wrecks White's kingside." },
+                                              { san: "fxe3", description: "White must recapture with the f-pawn, shattering the pawns in front of the king." },
+                                              { san: "Bxe3", description: "White played fxe3. Snap off the e3 pawn with your bishop! You've regained the gambit pawn, White's king is stuck in the centre behind ruined pawns, and you're now the one who is better." },
+                                              { san: "Qf3", description: "White develops with tempo, hitting the c6 pawn and eyeing f7." },
+                                              { san: "Bd4", description: "White played Qf3. Tuck the bishop back to d4 — it's safe, dominant on the long diagonal, and keeps White's king from ever finding shelter. Black is close to a pawn better here (~+1.0)." },
                                             ),
                                           },
                                         ],
@@ -1519,17 +1682,19 @@ const petrovTree: TreeMove[] = [
                                     san: "e5",
                                     description: "White grabs space with e5, kicking your knight.",
                                     lineName: "Stafford: 5.e5 Advance",
-                                    lineDescription: "Black posts the knight actively and chips away at White's extra pawn.",
+                                    lineDescription: "The main Stafford trap: after 6.d3?? Black ignores the attacked knight and plays ...Bc5!, winning material by force.",
                                     variations: line(
-                                      { san: "Ne4", description: "White played e5. Leap to e4 — a superb central square eyeing f2 and c3." },
-                                      { san: "d3", description: "White challenges the knight with d3." },
-                                      { san: "Nc5", description: "White played d3. Retreat to c5, a fine outpost that targets the d3 and e4 squares." },
-                                      { san: "Be3", description: "White challenges the knight again with Be3." },
-                                      { san: "Ne6", description: "White played Be3. Reroute to e6, hitting the d4 square and eyeing f4 — keep your bishop pair intact." },
-                                      { san: "Nc3", description: "White develops the knight to c3." },
-                                      { san: "Be7", description: "White played Nc3. Develop the bishop to e7, preparing to castle." },
-                                      { san: "Qd2", description: "White connects the rooks with Qd2." },
-                                      { san: "O-O", description: "White played Qd2. Castle (O-O); you are fully mobilized with the bishop pair and the e5 pawn as a long-term target — fair value for the pawn." },
+                                      { san: "Ne4", description: "White played e5. Leap to e4 — a superb central square eyeing f2 and c3, and the single most trap-laden square in the Stafford." },
+                                      { san: "d3", description: "White attacks your knight with d3 — the natural move, and a losing one." },
+                                      { san: "Bc5", description: "White played d3 attacking your knight — IGNORE IT. Bc5! is the Stafford's signature trap: if White grabs with 7.dxe4?? then 7...Bxf2+ 8.Ke2 Bg4+ skewers the king and queen and wins the queen outright." },
+                                      { san: "Qh5", description: "White finds the only real try, Qh5, defending f2 and hitting f7." },
+                                      { san: "Nxf2", description: "White played Qh5. Take on f2 anyway! The knight is immune and White's king is stuck in the center." },
+                                      { san: "e6", description: "White counter-attacks with e6, trying to blast open f7." },
+                                      { san: "Qe7", description: "White played e6. Calmly defend with Qe7 — you keep the extra piece and White's attack runs dry." },
+                                      { san: "Qxf7+", description: "White forces the queens off with Qxf7+." },
+                                      { san: "Qxf7", description: "White played Qxf7+. Recapture with the queen." },
+                                      { san: "exf7+", description: "White recaptures with check." },
+                                      { san: "Kxf7", description: "White played exf7+. Take with the king. Queens are off, you're a clean piece up (about +3.3) with a safe king — completely winning." },
                                     ),
                                   },
                                   // ── 5.Nc3 ──
@@ -1553,15 +1718,128 @@ const petrovTree: TreeMove[] = [
                                     san: "d4",
                                     description: "White grabs the full center with d4.",
                                     lineName: "Stafford: 5.d4",
-                                    lineDescription: "Black develops straight toward White's king.",
+                                    lineDescription: "5.d4 is loose — Black just takes on e4 and fully equalizes, the best result the Stafford gets anywhere.",
                                     variations: line(
-                                      { san: "Bd6", description: "White played d4. Develop the bishop to d6, aiming at the h2 pawn and supporting a kingside attack." },
-                                      { san: "Nc3", description: "White develops the knight to c3." },
-                                      { san: "O-O", description: "White played Nc3. Castle (O-O) and get your king safe before throwing pieces forward." },
+                                      { san: "Nxe4", description: "White played d4 — this is the one line where the Stafford is objectively fine. Just take the pawn! Nxe4 regains the gambit pawn immediately, and d4 has left White nothing to show for it." },
+                                      { san: "c3", description: "White props up the d4 pawn with c3." },
+                                      { san: "c5", description: "White played c3. Hit the center with c5, opening lines for your bishops before White consolidates." },
                                       { san: "Be2", description: "White develops the bishop to e2." },
-                                      { san: "Re8", description: "White played Be2. Seize the open e-file with Re8." },
+                                      { san: "Be7", description: "White played Be2. Develop Be7 and prepare to castle — no need to force matters, you're already equal." },
                                       { san: "O-O", description: "White castles kingside." },
-                                      { san: "Ng4", description: "White castled. Spring the knight to g4, hitting h2 and f2 — with the bishop on d6 and rook on e8, the threats of ...Qh4 give you a dangerous initiative." },
+                                      { san: "O-O", description: "White castled. Castle too. Material is level, you have the bishop pair and easy development — a completely equal game (0.00). This is the Stafford's best-case scenario." },
+                                    ),
+                                  },
+                                  // NOTE: 5.f3 is deliberately not covered. It is White's best
+                                  // practical try (White scores 54%) and Black is ~-1.9 with best
+                                  // play — there is no line worth drilling. If you expect it, play
+                                  // the solid 3...d6 Petrov below instead of the Stafford.
+                                  // ── 5.Bc4 ──
+                                  {
+                                    san: "Bc4",
+                                    description: "White develops the bishop to c4 — and this is the best news in the entire Stafford. Black scores 57% from here, White's worst-scoring 5th move.",
+                                    lineName: "Stafford: 5.Bc4",
+                                    lineDescription: "White's worst practical try. The natural ...Bc5 scores 58% for Black here — the highest of any Stafford position.",
+                                    variations: line(
+                                      { san: "Bc5", description: "White played Bc4. Now the natural Bc5 is exactly right — unlike after 5.f3, here it scores 58% for you, the best result the Stafford gets anywhere. The bishops stare at each other but White's is the one that has to move again. (The engine slightly prefers 5...Nxe4, but it only scores 48% in practice — take the trap-rich line.)" },
+                                      { san: "f3", description: "White finds the only really testing move, f3, shoring up e4." },
+                                      { san: "O-O", description: "White played f3. Castle — get the king safe and let White work out what to do with the awkward c4 bishop." },
+                                      { san: "d3", description: "White plays d3, supporting the centre." },
+                                      { san: "b5", description: "White played d3. Kick the bishop with b5! Gaining queenside space with tempo is your standard plan whenever White's bishop sits on c4." },
+                                      { san: "Bb3", description: "White retreats the bishop to b3." },
+                                      { san: "a5", description: "White played Bb3. Keep rolling with a5, threatening ...a4 to trap or trade the bishop." },
+                                      { san: "a4", description: "White stops the pawn with a4." },
+                                      { san: "b4", description: "White played a4. Push past with b4, clamping the queenside. Your pawns have gained real space, White's bishop is buried on b3, and you have the initiative and easy play for the pawn." },
+                                    ),
+                                  },
+                                ],
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                      {
+                        san: "d6",
+                        description: "White played Nxe5. The solid alternative to the Stafford: kick the knight with d6 and regain the pawn by force. This is the real Petrov, and it's about 1.5 pawns better than 3...Nc6 — play it when you want a sound game rather than tricks.",
+                        variations: [
+                          {
+                            san: "Nf3",
+                            description: "White retreats the knight to f3 — forced, since staying on e5 loses a piece to ...Qe7 or ...d5.",
+                            variations: [
+                              {
+                                san: "Nxe4",
+                                description: "White retreated. Take on e4! Material is level again and you have a fully equal, sound position — the exact opposite of the Stafford's permanent pawn deficit.",
+                                variations: [
+                                  {
+                                    san: "d4",
+                                    description: "White builds the big centre with d4 — the main line, played 30% of the time.",
+                                    lineName: "Petrov: 5.d4",
+                                    lineDescription: "The classical main line. Black equalizes completely — Stockfish evaluates the final position at dead level (0.00).",
+                                    variations: line(
+                                      { san: "d5", description: "White played d4. Anchor the knight with d5! Now the e4 knight is defended by a pawn and can't be chased away." },
+                                      { san: "Bd3", description: "White develops the bishop to d3, challenging your knight." },
+                                      { san: "Nc6", description: "White played Bd3. Develop Nc6, hitting d4 and preparing to castle." },
+                                      { san: "O-O", description: "White castles kingside." },
+                                      { san: "Bg4", description: "White castled. Pin the f3 knight with Bg4 — the d4 pawn is now under real pressure." },
+                                      { san: "c3", description: "White shores up d4 with c3." },
+                                      { san: "f5", description: "White played c3. Reinforce the outpost with f5! Your knight on e4 is now untouchable, and the position is completely equal (0.00) — a full, sound game with no material deficit." },
+                                    ),
+                                  },
+                                  {
+                                    san: "Qe2",
+                                    description: "White pins the knight along the e-file with Qe2, hoping to win it. Played 24% of the time.",
+                                    lineName: "Petrov: 5.Qe2",
+                                    lineDescription: "White's tricky pin — meet it with the symmetrical ...Qe7 and the pin dissolves.",
+                                    variations: line(
+                                      { san: "Qe7", description: "White pinned your knight with Qe2. Answer with Qe7! — the symmetrical reply. Now the pin is neutralized because White's queen is pinned too, and if queens come off you're perfectly fine." },
+                                      { san: "d3", description: "White plays d3, finally attacking the knight for real." },
+                                      { san: "Nf6", description: "White played d3. Retreat the knight to f6 — you've done your job, material is level and White's queen on e2 is now the awkward piece." },
+                                      { san: "Bg5", description: "White pins your knight with Bg5." },
+                                      { san: "Be6", description: "White played Bg5. Develop Be6, preparing to castle queenside and connect your rooks." },
+                                      { san: "Nc3", description: "White develops the knight to c3." },
+                                      { san: "Nc6", description: "White played Nc3. Complete development with Nc6. The position is level (about -0.1) with mutual chances — a normal game." },
+                                    ),
+                                  },
+                                  {
+                                    san: "Nc3",
+                                    description: "White challenges the knight immediately with Nc3. Played 21% of the time.",
+                                    lineName: "Petrov: 5.Nc3",
+                                    lineDescription: "White trades off the centralized knight; you develop naturally and reach a sound game.",
+                                    variations: line(
+                                      { san: "Nf6", description: "White played Nc3, attacking your knight. Simply retreat to f6 — you've already regained the pawn, so there is nothing to prove. Trading on c3 would only help White's centre." },
+                                      { san: "d4", description: "White grabs the centre with d4." },
+                                      { san: "Be7", description: "White played d4. Develop Be7 and prepare to castle; solid and flexible." },
+                                      { san: "Bd3", description: "White develops the bishop to d3." },
+                                      { san: "O-O", description: "White played Bd3. Castle — king safety first in a symmetrical structure." },
+                                      { san: "O-O", description: "White castles too." },
+                                      { san: "Bg4", description: "White castled. Pin the knight with Bg4, adding pressure to d4 and freeing your position. Material is level and you're solid." },
+                                    ),
+                                  },
+                                  {
+                                    san: "d3",
+                                    description: "White nudges the knight with d3 first, intending d4 next. Played 11% of the time.",
+                                    lineName: "Petrov: 5.d3",
+                                    lineDescription: "A slower move-order that usually transposes to the 5.Nc3 structures.",
+                                    variations: line(
+                                      { san: "Nf6", description: "White played d3, attacking the knight. Retreat to f6 — the pawn is already regained and White has spent a tempo on d3 that they'll want back." },
+                                      { san: "d4", description: "White follows up with d4, taking two moves to do what 5.d4 does in one." },
+                                      { san: "Be7", description: "White played d4, but has lost a tempo getting there. Develop Be7 and prepare to castle." },
+                                      { san: "Bd3", description: "White develops the bishop to d3." },
+                                      { san: "O-O", description: "White played Bd3. Castle to safety." },
+                                      { san: "O-O", description: "White castles." },
+                                      { san: "Bg4", description: "White castled. Pin with Bg4 — the same comfortable setup as the 5.Nc3 line, and here you're effectively a tempo better off." },
+                                    ),
+                                  },
+                                  {
+                                    san: "Bc4",
+                                    description: "White develops the bishop to c4, eyeing f7. Played 7% — and Black scores well against it.",
+                                    lineName: "Petrov: 5.Bc4",
+                                    lineDescription: "Answer the bishop with ...d5, gaining space with tempo. Black scores 59% here.",
+                                    variations: line(
+                                      { san: "d5", description: "White played Bc4, aiming at f7. Hit the bishop at once with d5! You gain space with tempo and shut the bishop's diagonal." },
+                                      { san: "Bb3", description: "White retreats the bishop to b3." },
+                                      { san: "Nc5", description: "White played Bb3. Reroute the knight to c5! It attacks the b3 bishop and heads for the excellent e6 or e4 squares." },
+                                      { san: "O-O", description: "White castles kingside." },
+                                      { san: "Be7", description: "White castled. Develop Be7 and prepare to castle. You have a space advantage, level material and easy play — Black scores 59% from here in practice." },
                                     ),
                                   },
                                 ],
@@ -1573,20 +1851,80 @@ const petrovTree: TreeMove[] = [
                     ],
                   },
                   // ── 3.Nc3: Four Knights ──
+                  // 3.Nc3 is 32.8% — almost exactly as common as 3.Nxe5, so all four
+                  // of White's main 4th moves get their own line.
                   {
                     san: "Nc3",
-                    description: "White declines the pawn grab and develops with Nc3, heading for the Four Knights.",
-                    lineName: "Four Knights Game",
-                    lineDescription: "A solid, symmetrical line when White avoids 3.Nxe5.",
-                    variations: line(
-                      { san: "Nc6", description: "White played Nc3. Defend e5 and develop with Nc6, mirroring White." },
-                      { san: "Bb5", description: "White pins your knight with Bb5, the Spanish Four Knights." },
-                      { san: "Bb4", description: "White played Bb5. Mirror with Bb4, pinning White's knight in return." },
-                      { san: "O-O", description: "White castles." },
-                      { san: "O-O", description: "White castled. Castle (O-O) — the symmetry gives you a sound, equal game." },
-                      { san: "d3", description: "White plays d3, opening the bishop." },
-                      { san: "d6", description: "White played d3. Mirror with d6; the position is balanced and easy to handle." },
-                    ),
+                    description: "White declines the pawn grab and develops with Nc3, heading for the Four Knights. This is 33% of games — just as likely as the Stafford, so know it just as well.",
+                    variations: [
+                      {
+                        san: "Nc6",
+                        description: "White played Nc3. Defend e5 and develop with Nc6, mirroring White — played by half of all players here and perfectly sound.",
+                        variations: [
+                          {
+                            san: "Bc4",
+                            description: "White develops the Italian bishop to c4, eyeing f7 — the most popular 4th move at 33%.",
+                            lineName: "Four Knights: 4.Bc4",
+                            lineDescription: "The fork trick! ...Nxe4 wins a pawn back by force and leaves Black clearly better.",
+                            variations: line(
+                              { san: "Nxe4", description: "White played Bc4 — and this allows the classic fork trick. Take with Nxe4! If White recaptures with Nxe4 you hit the knight and the bishop at once with ...d5." },
+                              { san: "Nxe4", description: "White recaptures with the knight, walking into it." },
+                              { san: "d5", description: "White played Nxe4. Now the point — d5! forks the knight on e4 and the bishop on c4. White cannot save both cleanly." },
+                              { san: "Bxd5", description: "White grabs the pawn with the bishop." },
+                              { san: "Qxd5", description: "White played Bxd5. Recapture with the queen. You've regained everything and White's knight on e4 is loose in the centre." },
+                              { san: "Nc3", description: "White retreats the knight with tempo on your queen." },
+                              { san: "Qd6", description: "White played Nc3. Step back to d6 — safe, central, and eyeing the open lines. You're clearly better here (about +1.6) with the extra centre pawn and easy development." },
+                            ),
+                          },
+                          {
+                            san: "d4",
+                            description: "White strikes the centre with d4, the Scotch Four Knights — 26% of games.",
+                            lineName: "Four Knights: 4.d4 (Scotch)",
+                            lineDescription: "Pin with ...Bb4 and liquidate; Black comes out with the better structure.",
+                            variations: line(
+                              { san: "Bb4", description: "White played d4. Pin the c3 knight with Bb4! — it stops White recapturing comfortably and is far better than the routine ...exd4." },
+                              { san: "dxe5", description: "White pushes past with dxe5, attacking your f6 knight." },
+                              { san: "Nxe4", description: "White played dxe5. Grab the pawn with Nxe4! The pin on c3 means White can't just take your knight." },
+                              { san: "Bd2", description: "White breaks the pin with Bd2." },
+                              { san: "Bxc3", description: "White played Bd2. Trade on c3 — you're forcing the issue while White's structure suffers." },
+                              { san: "Bxc3", description: "White recaptures with the bishop." },
+                              { san: "Nxc3", description: "White played Bxc3. Take again on c3! White must recapture with a pawn and accept doubled, damaged pawns." },
+                              { san: "bxc3", description: "White recaptures with the b-pawn, leaving doubled c-pawns. You're better (about +0.7) with the healthier structure." },
+                            ),
+                          },
+                          {
+                            san: "Bb5",
+                            description: "White pins with Bb5, the Spanish Four Knights — 23% of games.",
+                            lineName: "Four Knights: 4.Bb5 (Rubinstein)",
+                            lineDescription: "The Rubinstein counter-gambit ...Nd4! — Black's best-scoring answer at 65%.",
+                            variations: line(
+                              { san: "Nd4", description: "White pinned with Bb5. Play the Rubinstein — Nd4!! Instead of the passive ...Bb4, jump into the centre and offer a pawn. It scores 65% for Black and takes most opponents completely out of book." },
+                              { san: "Nxd4", description: "White takes the knight." },
+                              { san: "exd4", description: "White played Nxd4. Recapture with the pawn, kicking the c3 knight and gaining time." },
+                              { san: "Ne2", description: "White retreats the knight to e2." },
+                              { san: "c6", description: "White played Ne2. Chase the bishop with c6 — you're building a big pawn centre while White's pieces shuffle backwards." },
+                              { san: "Bd3", description: "White retreats the bishop to d3." },
+                              { san: "d5", description: "White played Bd3. Take the full centre with d5! You have a dominant pawn duo and White's pieces are passive — Black is clearly better (about +0.9)." },
+                            ),
+                          },
+                          {
+                            san: "d3",
+                            description: "White plays the quiet d3, keeping everything solid — 7% of games.",
+                            lineName: "Four Knights: 4.d3",
+                            lineDescription: "The quiet line — free your position with ...d5 and trade into an easy game.",
+                            variations: line(
+                              { san: "d5", description: "White played the modest d3. Strike in the centre with d5! When White plays quietly, seize the space they've declined." },
+                              { san: "exd5", description: "White captures on d5." },
+                              { san: "Nxd5", description: "White played exd5. Recapture with the knight, centralizing it on a fine square." },
+                              { san: "Nxd5", description: "White trades knights on d5." },
+                              { san: "Qxd5", description: "White played Nxd5. Recapture with the queen — she's active in the centre and can't easily be chased." },
+                              { san: "Be2", description: "White develops modestly with Be2." },
+                              { san: "Bf5", description: "White played Be2. Develop Bf5, hitting the loose d3 pawn and completing your setup. You're comfortable with more space and freer pieces." },
+                            ),
+                          },
+                        ],
+                      },
+                    ],
                   },
                   // ── 3.d4: Modern Attack ──
                   {
@@ -1616,6 +1954,24 @@ const petrovTree: TreeMove[] = [
                       { san: "Nxc3", description: "White played Nc3. Trade with Nxc3, accepting the challenge." },
                       { san: "dxc3", description: "White recaptures with dxc3, opening lines for rapid development." },
                       { san: "f6", description: "White played dxc3. Shore up your extra pawn with f6, guarding e5 — develop carefully and your material edge should tell." },
+                    ),
+                  },
+                  // ── 3.d3 ──
+                  {
+                    san: "d3",
+                    description: "White plays the quiet d3, defending e4 without committing to anything. Played 6.8% of the time.",
+                    lineName: "3.d3 Quiet Line",
+                    lineDescription: "White declines every critical continuation — take the centre with ...d5 and equalize comfortably.",
+                    variations: line(
+                      { san: "Nc6", description: "White played the modest d3, protecting e4 but conceding the initiative. Develop Nc6 and prepare to take over the centre." },
+                      { san: "Be2", description: "White develops quietly with Be2." },
+                      { san: "d5", description: "White played Be2. Strike with d5! White's passive setup gives you a free hand — grab the space they declined to take." },
+                      { san: "exd5", description: "White captures on d5." },
+                      { san: "Nxd5", description: "White played exd5. Recapture with the knight, centralizing it." },
+                      { san: "O-O", description: "White castles kingside." },
+                      { san: "Be7", description: "White castled. Develop Be7 and get ready to castle yourself — no rush, you already have the freer game." },
+                      { san: "c4", description: "White challenges your knight with c4." },
+                      { san: "Nb6", description: "White played c4. Retreat to b6, where the knight eyes c4 and d5. The position is dead level (0.00) and you have a comfortable, easy game." },
                     ),
                   },
                 ],
@@ -1744,8 +2100,9 @@ const scandinavianTree: TreeMove[] = [
                           { san: "Nf3", description: "White develops the knight to f3." },
                           { san: "Nc6", description: "White played Nf3. Develop the knight to c6, hitting d4." },
                           { san: "c4", description: "White gains space and hits your queen with c4." },
-                          { san: "Qd8", description: "White played c4. Retreat the queen to d8 — White has a space edge, but you're solid and even on material." },
-                          { san: "Nc3", description: "White develops Nc3, completing a harmonious setup." },
+                          { san: "Qe4", description: "White played c4, hitting your queen. Don't crawl back to d8 — step forward with Qe4! Offering the trade on e2 keeps White from consolidating, and after the passive ...Qd8 White gets a free hand and a clear edge." },
+                          { san: "Be3", description: "White declines the trade and develops with Be3." },
+                          { san: "e6", description: "White played Be3. Open a path for the f8 bishop with e6. Your queen sits actively on e4 and White's extra space hasn't turned into anything concrete — you're only marginally worse." },
                         ),
                       },
                     ],
@@ -1831,6 +2188,449 @@ const bishopsOpeningTree: TreeMove[] = [
   },
 ];
 
+// ─── Caro-Kann (as White) ────────────────────────────────────
+// Your answer to 1...c6 (8.3% of replies to 1.e4). The Advance Variation (3.e5)
+// takes space and gives clear plans, sidestepping the heavy theory of 3.Nc3.
+// Lines follow the most-played reply for Black and the best-scoring practical
+// choice for White at 1600–2000, then verified with Stockfish.
+const whiteVsCaroKannTree: TreeMove[] = [
+  {
+    san: "e4",
+    description: "Open with e4.",
+    variations: [
+      {
+        san: "c6",
+        description: "Black plays the Caro-Kann — preparing ...d5 with a pawn behind it, unlike the French where the light-squared bishop gets locked in.",
+        variations: [
+          {
+            san: "d4",
+            description: "Black played c6, preparing ...d5. Take the full centre with d4 before Black gets to challenge it.",
+            variations: [
+              {
+                san: "d5",
+                description: "Black strikes at your centre with d5, exactly as the Caro-Kann intends.",
+                variations: [
+                  {
+                    san: "e5",
+                    description: "Black played d5. Push past with e5 — the Advance Variation. You gain space and keep the position closed, and unlike the French, Black's problem bishop gets out to f5 first, so you play against it.",
+                    variations: [
+                      {
+                        san: "Bf5",
+                        description: "Black develops the bishop outside the pawn chain with Bf5 — played 68% of the time and the whole point of the Caro-Kann.",
+                        lineName: "Advance: 3...Bf5",
+                        lineDescription: "The main line. You develop calmly and target the b6/c5 squares behind Black's centre.",
+                        variations: line(
+                          { san: "Nf3", description: "Black played Bf5. Develop naturally with Nf3 — the solid treatment. (The sharp 4.h4 h5 5.Bg5 line lets Black grab on b2 and score well, so keep it simple.)" },
+                          { san: "e6", description: "Black supports the d5 pawn with e6." },
+                          { san: "Be2", description: "Black played e6. Develop Be2, preparing to castle. The bishop is modest here but the plan is c4 or Be3 hitting the queenside dark squares." },
+                          { san: "c5", description: "Black counter-attacks your centre with c5." },
+                          { san: "Be3", description: "Black played c5. Reinforce d4 with Be3 — the pawn chain is your space advantage, so don't give it up cheaply." },
+                          { san: "Qb6", description: "Black hits b2 and piles on d4 with Qb6." },
+                          { san: "Nc3", description: "Black played Qb6. Develop Nc3 and let the b2 pawn go if Black wants it — you're well ahead in development and the queen is misplaced on b2." },
+                          { san: "Nc6", description: "Black brings the last minor piece toward the centre. You have space, a comfortable game, and clear play against d5 and c5." },
+                        ),
+                      },
+                      {
+                        san: "c5",
+                        description: "Black hits the base of your pawn chain immediately with c5 — the second most popular try at 23%.",
+                        lineName: "Advance: 3...c5",
+                        lineDescription: "Black challenges d4 at once; you take the pawn and hold it with a queenside space grab.",
+                        variations: line(
+                          { san: "dxc5", description: "Black played c5. Just take it — dxc5. Holding the extra pawn is awkward for Black to prove compensation against." },
+                          { san: "Nc6", description: "Black develops Nc6, eyeing the e5 pawn." },
+                          { san: "a3", description: "Black played Nc6 hitting e5. Play a3! — quietly preparing b4 to defend c5 with a pawn chain rather than clinging to e5." },
+                          { san: "Nxe5", description: "Black regains the pawn on e5." },
+                          { san: "b4", description: "Black took on e5. Play b4, locking the extra c5 pawn in place and grabbing serious queenside space." },
+                          { san: "Nf6", description: "Black develops the kingside knight." },
+                          { san: "Bb2", description: "Black played Nf6. Fianchetto with Bb2 — the bishop rakes the long diagonal and supports your queenside pawn mass." },
+                          { san: "Nc6", description: "Black retreats the knight to c6. Material is level but your extra c5 pawn and queenside space give you the easier game." },
+                        ),
+                      },
+                      {
+                        san: "e6",
+                        description: "Black plays e6 first, shutting in the c8 bishop — a French-style setup, and the concession the Caro-Kann is meant to avoid.",
+                        lineName: "Advance: 3...e6",
+                        lineDescription: "Black voluntarily locks in the bad bishop; you build the standard c3/Bd3/Nf3 clamp.",
+                        variations: line(
+                          { san: "c3", description: "Black played e6, burying the c8 bishop. Support d4 with c3 — with Black's bishop passive, you have a risk-free space advantage." },
+                          { san: "c5", description: "Black challenges the centre with c5." },
+                          { san: "Bd3", description: "Black played c5. Develop Bd3 — the strong diagonal aiming at h7, the standard Advance setup." },
+                          { san: "Nc6", description: "Black develops the knight to c6." },
+                          { san: "Nf3", description: "Black played Nc6. Complete development with Nf3, defending d4 a second time." },
+                          { san: "Qb6", description: "Black pressures b2 and d4 with Qb6." },
+                          { san: "dxc5", description: "Black played Qb6. Release the tension with dxc5! — the queen on b6 now bites on granite and you keep a pleasant space edge." },
+                          { san: "Bxc5", description: "Black recaptures with the bishop. You're comfortably better: more space and a permanently passive black light-squared bishop." },
+                        ),
+                      },
+                      {
+                        san: "g6",
+                        description: "Black fianchettoes with g6, developing the dark-squared bishop instead of solving the c8 bishop's problem.",
+                        lineName: "Advance: 3...g6",
+                        lineDescription: "A rarer setup; straightforward development gives you a comfortable space edge.",
+                        variations: line(
+                          { san: "Nf3", description: "Black played g6. Develop Nf3 — solid and flexible; Black's kingside fianchetto is slow against your extra space." },
+                          { san: "Bg7", description: "Black completes the fianchetto." },
+                          { san: "Bd3", description: "Black played Bg7. Develop Bd3, ready to castle and eyeing the h7 square." },
+                          { san: "Bg4", description: "Black pins the knight with Bg4." },
+                          { san: "Nbd2", description: "Black played Bg4. Develop Nbd2 — it supports the coming h3 and keeps your structure intact." },
+                          { san: "e6", description: "Black solidifies the centre with e6." },
+                          { san: "h3", description: "Black played e6. Question the bishop with h3. Black must either trade it off or retreat, and you keep a durable space advantage." },
+                        ),
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+];
+
+// ─── French (as White) ───────────────────────────────────────
+// Your answer to 1...e6 (11.3% of replies to 1.e4). Three systems side by side:
+// the Tarrasch (3.Nd2), the Advance (3.e5), and the Exchange (3.exd5) — pick by
+// taste, or drill all three.
+const whiteVsFrenchTree: TreeMove[] = [
+  {
+    san: "e4",
+    description: "Open with e4.",
+    variations: [
+      {
+        san: "e6",
+        description: "Black plays the French Defense, preparing ...d5 — solid, but it shuts in the c8 bishop.",
+        variations: [
+          {
+            san: "d4",
+            description: "Black played e6. Occupy the centre with d4; Black will challenge with ...d5 next.",
+            variations: [
+              {
+                san: "d5",
+                description: "Black challenges your centre with d5, the point of the French.",
+                variations: [
+                  // ── Tarrasch: 3.Nd2 ──
+                  {
+                    san: "Nd2",
+                    description: "Black played d5. Play the Tarrasch with Nd2 — defending e4 while sidestepping the Winawer's annoying ...Bb4 pin entirely (3.Nc3 Bb4 is Black's sharpest try).",
+                    variations: [
+                      {
+                        san: "Nf6",
+                        description: "Black develops Nf6, hitting e4 again — the most popular reply at 38%.",
+                        lineName: "Tarrasch: 3...Nf6",
+                        lineDescription: "The closed Tarrasch: you push past and build a space clamp with c3 and Ne2.",
+                        variations: line(
+                          { san: "e5", description: "Black played Nf6 attacking e4. Push past with e5, gaining space and kicking the knight to a poor square." },
+                          { san: "Nfd7", description: "Black retreats the knight to d7, where it eyes the e5 and c5 breaks." },
+                          { san: "Bd3", description: "Black retreated to d7. Develop Bd3 — the classic French bishop, aiming at h7 across the board." },
+                          { san: "c5", description: "Black hits the base of your chain with c5." },
+                          { san: "c3", description: "Black played c5. Prop up d4 with c3 — your whole space advantage rests on this pawn chain." },
+                          { san: "Nc6", description: "Black adds a second attacker to d4." },
+                          { san: "Ne2", description: "Black played Nc6. Develop Ne2! — the knight belongs here in the Tarrasch, supporting d4 a third time and heading for f4 or g3." },
+                          { san: "Qb6", description: "Black piles up on d4 with Qb6. Your centre holds, you have more space, and the plan is f4 and a kingside attack while Black's c8 bishop is still asleep." },
+                        ),
+                      },
+                      {
+                        san: "c5",
+                        description: "Black hits the centre immediately with c5 — the open Tarrasch, played 26%.",
+                        lineName: "Tarrasch: 3...c5",
+                        lineDescription: "Black accepts an isolated queen's pawn; you develop fast and blockade d4.",
+                        variations: line(
+                          { san: "exd5", description: "Black played c5. Take with exd5 — the point is to leave Black with an isolated d-pawn after the recapture." },
+                          { san: "exd5", description: "Black recaptures with the e-pawn, accepting the isolated queen's pawn." },
+                          { san: "Ngf3", description: "Black now has an isolated d5 pawn. Develop Ngf3, heading to blockade the square in front of it." },
+                          { san: "Nf6", description: "Black develops the kingside knight." },
+                          { san: "Bb5+", description: "Black played Nf6. Check with Bb5+! — gaining a tempo and provoking a slight weakening before Black is fully coordinated." },
+                          { san: "Nc6", description: "Black blocks the check with the knight." },
+                          { san: "O-O", description: "Black blocked with Nc6. Castle — get the king safe and prepare to pile onto the isolated d5 pawn with Re1 and Nb3." },
+                          { san: "Be7", description: "Black develops the bishop and prepares to castle. You have the long-term target on d5 and the easier plan." },
+                        ),
+                      },
+                      {
+                        san: "dxe4",
+                        description: "Black releases the tension at once with dxe4 — the Rubinstein Tarrasch, played 23%.",
+                        lineName: "Tarrasch: 3...dxe4",
+                        lineDescription: "Black gives up the centre early; you get free development and a lasting pull.",
+                        variations: line(
+                          { san: "Nxe4", description: "Black played dxe4, conceding the centre. Recapture with Nxe4 — the knight sits beautifully and you're already better developed." },
+                          { san: "Nf6", description: "Black challenges the strong knight with Nf6." },
+                          { san: "Nxf6+", description: "Black played Nf6. Trade with Nxf6+ — Black's recapture will either wreck the structure or misplace the queen." },
+                          { san: "Qxf6", description: "Black recaptures with the queen, avoiding doubled pawns but exposing her early." },
+                          { san: "Bd3", description: "Black recaptured with the queen. Develop Bd3, hitting h7 and gaining time on the exposed queen's diagonal." },
+                          { san: "Bd6", description: "Black develops the bishop to d6." },
+                          { san: "Nf3", description: "Black played Bd6. Complete development with Nf3; you have a comfortable, risk-free advantage and Black's light-squared bishop is still a problem piece." },
+                          { san: "h6", description: "Black makes luft. You're better developed with a pleasant, easy game." },
+                        ),
+                      },
+                      {
+                        san: "Nc6",
+                        description: "Black develops Nc6, a rarer move-order that blocks the c-pawn.",
+                        lineName: "Tarrasch: 3...Nc6",
+                        lineDescription: "Black's knight blocks the ...c5 break; you develop smoothly and castle.",
+                        variations: line(
+                          { san: "Ngf3", description: "Black played Nc6, which gets in the way of the ...c5 break. Develop Ngf3 and just complete your pieces — Black has no quick counterplay." },
+                          { san: "Nf6", description: "Black develops the second knight." },
+                          { san: "Bd3", description: "Black played Nf6. Develop Bd3, holding e4 a second time and eyeing the kingside." },
+                          { san: "dxe4", description: "Black releases the tension with dxe4." },
+                          { san: "Nxe4", description: "Black played dxe4. Recapture with the knight — you have a free hand in the centre." },
+                          { san: "Be7", description: "Black develops modestly with Be7." },
+                          { san: "O-O", description: "Black played Be7. Castle and finish development; you have more space and the healthier structure." },
+                          { san: "O-O", description: "Black castles too. You're comfortably better with an easy plan of c3 and Re1." },
+                        ),
+                      },
+                    ],
+                  },
+                  // ── Advance: 3.e5 ──
+                  {
+                    san: "e5",
+                    description: "Black played d5. Play the Advance with e5 — a space-grabbing system with the same structures as the Advance Caro-Kann, and here Black's c8 bishop is genuinely bad.",
+                    lineName: "Advance Variation",
+                    lineDescription: "Grab space, hold d4 with c3, and play against Black's locked-in light-squared bishop.",
+                    variations: line(
+                      { san: "c5", description: "Black attacks the base of your pawn chain with c5 — almost automatic in the Advance." },
+                      { san: "c3", description: "Black played c5. Defend d4 with c3. The chain d4–e5 is your space advantage; everything revolves around holding it." },
+                      { san: "Nc6", description: "Black adds another attacker to d4." },
+                      { san: "Nf3", description: "Black played Nc6. Develop Nf3, defending d4 again and preparing to castle." },
+                      { san: "Qb6", description: "Black piles onto d4 and b2 with Qb6 — the standard French plan." },
+                      { san: "a3", description: "Black played Qb6. Play a3! — preparing b4 to buttress the chain, and taking b4 away from Black's pieces." },
+                      { san: "cxd4", description: "Black releases the tension with cxd4." },
+                      { san: "cxd4", description: "Black played cxd4. Recapture with cxd4, keeping the strong pawn duo." },
+                      { san: "Nge7", description: "Black routes the knight via e7 toward f5 to hit d4. You hold the centre and have a clear kingside space advantage." },
+                    ),
+                  },
+                  // ── Exchange: 3.exd5 ──
+                  {
+                    san: "exd5",
+                    description: "Black played d5. The Exchange with exd5 is the simplest system of all — symmetrical structure, no theory to memorize. Solid, though it does hand Black easy equality.",
+                    lineName: "Exchange Variation",
+                    lineDescription: "Symmetrical and safe. Easiest to learn, but the least ambitious of the three.",
+                    variations: line(
+                      { san: "exd5", description: "Black recaptures, and the position is symmetrical. The upside: Black's problem bishop is now free, but so is your extra tempo." },
+                      { san: "Nf3", description: "Black recaptured on d5. Develop Nf3 — in a symmetrical structure the extra tempo is your only edge, so don't waste moves." },
+                      { san: "Nf6", description: "Black mirrors your development." },
+                      { san: "c4", description: "Black played Nf6. Break the symmetry with c4! — challenging d5 and giving the game some actual content." },
+                      { san: "c6", description: "Black holds the d5 pawn with c6." },
+                      { san: "Bd3", description: "Black played c6. Develop Bd3 toward the kingside; you have a small but risk-free pull." },
+                      { san: "Bd6", description: "Black mirrors again with Bd6." },
+                      { san: "O-O", description: "Black played Bd6. Castle. The position is balanced but you're a tempo up with a clear plan of Re1 and Nc3." },
+                    ),
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+];
+
+// ─── Sicilian (as White) ─────────────────────────────────────
+// Your answer to 1...c5 (23.3% of replies to 1.e4 — the most common after
+// 1...e5). Three systems: the Open Sicilian (2.Nf3 + 3.d4), the Alapin (2.c3),
+// and the bishop checks (Rossolimo 3.Bb5 / Moscow 3.Bb5+).
+const whiteVsSicilianTree: TreeMove[] = [
+  {
+    san: "e4",
+    description: "Open with e4.",
+    variations: [
+      {
+        san: "c5",
+        description: "Black plays the Sicilian — the most common answer to 1.e4 after 1...e5, and statistically Black's best-scoring defense.",
+        variations: [
+          {
+            san: "Nf3",
+            description: "Black played the Sicilian. Develop Nf3 — the flexible move that keeps both the Open Sicilian (3.d4) and the bishop checks (3.Bb5) on the table.",
+            variations: [
+              {
+                san: "Nc6",
+                description: "Black develops the queen's knight — the most popular reply at 43%.",
+                variations: [
+                  {
+                    san: "d4",
+                    description: "Black played Nc6. Blast open the centre with d4 — the Open Sicilian, the most testing try.",
+                    lineName: "Open Sicilian: 2...Nc6",
+                    lineDescription: "Black grabs space with ...e5; you exploit the d5 hole with a Maroczy-style clamp.",
+                    variations: line(
+                      { san: "cxd4", description: "Black takes on d4, as almost everyone does." },
+                      { san: "Nxd4", description: "Black played cxd4. Recapture with the knight — this is the Open Sicilian proper. Your knight dominates the centre." },
+                      { san: "e5", description: "Black kicks the knight at once with e5 — the Sveshnikov/Kalashnikov idea, accepting a hole on d5." },
+                      { san: "Nb5", description: "Black played e5, weakening d5. Jump to b5! — the knight heads for d6 or supports the clamp, and Black must spend time stopping Nd6+." },
+                      { san: "d6", description: "Black covers the d6 square with the pawn." },
+                      { san: "c4", description: "Black played d6. Clamp with c4! — the Maroczy Bind. You take total control of d5, the hole Black created on move 5." },
+                      { san: "a6", description: "Black kicks the knight with a6." },
+                      { san: "N5c3", description: "Black played a6. Retreat with N5c3, keeping the bind intact — the knight has done its job forcing ...d6." },
+                      { san: "Nf6", description: "Black develops the kingside knight. You have a permanent grip on d5 and a comfortable, strategically clear position." },
+                    ),
+                  },
+                  {
+                    san: "Bb5",
+                    description: "Black played Nc6. Alternatively play the Rossolimo with Bb5 — dodging the entire Open Sicilian theory load while still fighting for an edge. It scores 50% for White.",
+                    variations: [
+                      {
+                        san: "g6",
+                        description: "Black fianchettoes with g6, the main Rossolimo reply.",
+                        lineName: "Rossolimo: 3...g6",
+                        lineDescription: "Black fianchettoes; you take space with e5 and target the d5 square.",
+                        variations: line(
+                          { san: "O-O", description: "Black played g6. Just castle — you keep the option of Bxc6 wrecking Black's structure for later." },
+                          { san: "Bg7", description: "Black completes the fianchetto." },
+                          { san: "Re1", description: "Black played Bg7. Play Re1, quietly preparing the e5 push that gains space." },
+                          { san: "Nf6", description: "Black develops the knight to f6." },
+                          { san: "e5", description: "Black played Nf6. Push e5! — gaining space with tempo and kicking the knight to the rim of your territory." },
+                          { san: "Nd5", description: "Black centralizes the knight on d5." },
+                          { san: "Nc3", description: "Black played Nd5. Challenge it immediately with Nc3 — trades favour you here since Black's dark squares get loose." },
+                          { san: "Nc7", description: "Black retreats to c7 to avoid the trade. You have a space advantage and Black's pieces are tangled." },
+                        ),
+                      },
+                      {
+                        san: "e6",
+                        description: "Black plays e6, preparing a quick ...Nge7 and ...d5.",
+                        lineName: "Rossolimo: 3...e6",
+                        lineDescription: "Black aims for ...d5; you keep the bishop with a4-c2 and build a slow clamp.",
+                        variations: line(
+                          { san: "O-O", description: "Black played e6. Castle first — no rush to commit the bishop." },
+                          { san: "Nge7", description: "Black develops the knight to e7, supporting the ...d5 break." },
+                          { san: "c3", description: "Black played Nge7. Support a future d4 with c3, building the centre slowly." },
+                          { san: "a6", description: "Black questions your bishop with a6." },
+                          { san: "Ba4", description: "Black played a6. Retreat to a4 — keep the bishop; on the a4–c2 diagonal it becomes a strong attacking piece." },
+                          { san: "b5", description: "Black gains queenside space and hits the bishop again." },
+                          { san: "Bc2", description: "Black played b5. Tuck the bishop on c2, aiming at h7 — exactly the Ruy López regrouping you already know." },
+                          { san: "d5", description: "Black finally achieves the d5 break. The structure resembles a Ruy López and you have a comfortable, familiar game." },
+                        ),
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                san: "d6",
+                description: "Black plays d6, heading for the Najdorf or Dragon — 32% of replies.",
+                variations: [
+                  {
+                    san: "d4",
+                    description: "Black played d6. Open the centre with d4 — into the Open Sicilian and the main Najdorf battleground.",
+                    lineName: "Open Sicilian: Najdorf",
+                    lineDescription: "The English Attack setup with f3 — a clear, plan-based way to meet the Najdorf.",
+                    variations: line(
+                      { san: "cxd4", description: "Black takes on d4." },
+                      { san: "Nxd4", description: "Black played cxd4. Recapture with the knight, reaching the main Open Sicilian tabiya." },
+                      { san: "Nf6", description: "Black develops with tempo, attacking your e4 pawn." },
+                      { san: "Nc3", description: "Black played Nf6 hitting e4. Defend it naturally with Nc3, developing at the same time." },
+                      { san: "a6", description: "Black plays a6 — the Najdorf, controlling b5 and preparing ...e5 or ...e6." },
+                      { san: "f3", description: "Black played the Najdorf. Answer with f3! — the English Attack. You bolster e4 and prepare Be3, Qd2, g4 with a straightforward kingside pawn storm." },
+                      { san: "e5", description: "Black gains space and kicks your knight with e5." },
+                      { san: "Nb3", description: "Black played e5. Retreat to b3 — the knight is fine here and Black has permanently weakened d5." },
+                      { san: "Be6", description: "Black develops the bishop to cover d5. Your plan is clear: Be3, Qd2, g4 and attack. Black's d5 hole is a lasting target." },
+                    ),
+                  },
+                  {
+                    san: "Bb5+",
+                    description: "Black played d6. Alternatively give the Moscow check with Bb5+ — another way to duck the Open Sicilian entirely, forcing Black to block awkwardly.",
+                    lineName: "Moscow: 3.Bb5+",
+                    lineDescription: "Trade off the light-squared bishops and play a comfortable, low-theory setup.",
+                    variations: line(
+                      { san: "Bd7", description: "Black blocks with the bishop, the most common reply." },
+                      { san: "Bxd7+", description: "Black blocked with Bd7. Trade with Bxd7+ — Black must recapture with a piece, and every recapture has a small drawback." },
+                      { san: "Nxd7", description: "Black recaptures with the knight, keeping the queen flexible." },
+                      { san: "O-O", description: "Black played Nxd7. Castle. You've traded off your 'bad' bishop and Black's development is slightly clumsy." },
+                      { san: "Ngf6", description: "Black develops the second knight to f6." },
+                      { san: "Qe2", description: "Black played Ngf6. Develop Qe2, connecting the rooks and supporting a later e5 or c3-d4." },
+                      { san: "g6", description: "Black fianchettoes the dark-squared bishop." },
+                      { san: "c3", description: "Black played g6. Play c3, preparing d4 to claim the centre on your own terms." },
+                      { san: "Bg7", description: "Black completes the fianchetto. You have a pleasant, risk-free game with a clear d4 plan — and none of the Najdorf theory." },
+                    ),
+                  },
+                ],
+              },
+              {
+                san: "e6",
+                description: "Black plays e6, heading for the Kan or Taimanov — 17% of replies.",
+                lineName: "Open Sicilian: 2...e6",
+                lineDescription: "Against the Kan, the Maroczy clamp with c4 takes the sting out of Black's flexibility.",
+                variations: line(
+                  { san: "d4", description: "Black played e6. Open the centre with d4 as usual." },
+                  { san: "cxd4", description: "Black takes on d4." },
+                  { san: "Nxd4", description: "Black played cxd4. Recapture with the knight." },
+                  { san: "a6", description: "Black plays a6 — the Kan Variation, staying flexible and controlling b5." },
+                  { san: "c4", description: "Black played the Kan. Clamp down with c4! — the Maroczy Bind. It kills Black's ...b5 and ...d5 breaks and leaves you with a lasting space advantage." },
+                  { san: "Qc7", description: "Black develops the queen to c7, eyeing the c-file and e5." },
+                  { san: "Nc3", description: "Black played Qc7. Develop Nc3, reinforcing the bind on d5." },
+                  { san: "Nf6", description: "Black develops the kingside knight." },
+                  { san: "a3", description: "Black played Nf6. Play a3 — a useful prophylactic move stopping ...Bb4 and preparing to expand with b4." },
+                  { san: "Nc6", description: "Black develops the last knight. You hold the bind, Black has no easy freeing break, and you can build slowly with Be2 and O-O." },
+                ),
+              },
+              {
+                san: "g6",
+                description: "Black fianchettoes immediately — the Accelerated Dragon, 5% of replies.",
+                lineName: "Open Sicilian: Accelerated Dragon",
+                lineDescription: "The Maroczy Bind is the critical test of Black's early fianchetto.",
+                variations: line(
+                  { san: "d4", description: "Black played g6. Open with d4 — Black's early fianchetto lets you set up the strongest anti-Dragon formation." },
+                  { san: "cxd4", description: "Black takes on d4." },
+                  { san: "Nxd4", description: "Black played cxd4. Recapture with the knight." },
+                  { san: "Bg7", description: "Black completes the fianchetto, aiming the bishop down the long diagonal." },
+                  { san: "c4", description: "Black played Bg7. Set the Maroczy Bind with c4! — this is the critical test of the Accelerated Dragon. It takes d5 and b5 away from Black permanently." },
+                  { san: "Nc6", description: "Black develops the knight to c6, hitting your d4 knight." },
+                  { san: "Nc2", description: "Black played Nc6. Retreat to c2! — avoiding the trade on d4 that would relieve Black's cramp, and keeping the bind." },
+                  { san: "Nf6", description: "Black develops the kingside knight." },
+                  { san: "Nc3", description: "Black played Nf6. Develop Nc3, covering d5 a second time — the whole point of the bind." },
+                  { san: "O-O", description: "Black castles. You have a durable space advantage and Black must find a freeing break that the bind makes very hard." },
+                ),
+              },
+            ],
+          },
+          // ── Alapin: 2.c3 ──
+          {
+            san: "c3",
+            description: "Black played the Sicilian. The Alapin with c3 is the low-maintenance option — you meet every Sicilian defense with one system, preparing d4 with a big centre. No Najdorf or Dragon theory needed.",
+            variations: [
+              {
+                san: "d5",
+                description: "Black challenges the centre immediately with d5 — the critical and most popular reply.",
+                lineName: "Alapin: 2...d5",
+                lineDescription: "Black grabs the centre back; you get free development against the exposed queen.",
+                variations: line(
+                  { san: "exd5", description: "Black played d5. Take with exd5 — Black has to recapture with the queen and lose time." },
+                  { san: "Qxd5", description: "Black recaptures with the queen, which will soon be harassed." },
+                  { san: "d4", description: "Black's queen is out early on d5. Build the centre with d4 — exactly what c3 was for." },
+                  { san: "cxd4", description: "Black takes on d4." },
+                  { san: "cxd4", description: "Black played cxd4. Recapture with the c-pawn, giving you a clean, strong centre." },
+                  { san: "Nc6", description: "Black develops the knight, hitting d4." },
+                  { san: "Nf3", description: "Black played Nc6. Develop Nf3, defending d4 and preparing to gain time on the queen." },
+                  { san: "Bg4", description: "Black pins the knight with Bg4." },
+                  { san: "Be2", description: "Black played Bg4. Break the pin with Be2 — simple development, and you're ready to castle with an isolated-pawn position where you hold the initiative." },
+                  { san: "e6", description: "Black solidifies with e6. You have an easy game: better development and a clear plan of O-O, Nc3 and pressure down the c-file." },
+                ),
+              },
+              {
+                san: "Nf6",
+                description: "Black attacks e4 immediately with Nf6 — the other main Alapin try.",
+                lineName: "Alapin: 2...Nf6",
+                lineDescription: "You push past and chase the knight while building the centre.",
+                variations: line(
+                  { san: "e5", description: "Black played Nf6 attacking e4. Push past with e5, kicking the knight and gaining space." },
+                  { san: "Nd5", description: "Black centralizes the knight on d5, where it looks good but is easy to harass." },
+                  { san: "d4", description: "Black played Nd5. Build the big centre with d4 — this is exactly the position c3 was preparing." },
+                  { san: "cxd4", description: "Black takes on d4." },
+                  { san: "Nf3", description: "Black played cxd4. Develop with Nf3 rather than rushing the recapture — you'll win the pawn back and your lead in development is worth more than a tempo." },
+                  { san: "Nc6", description: "Black develops the knight to c6." },
+                  { san: "Bc4", description: "Black played Nc6. Develop Bc4, hitting the d5 knight and eyeing f7." },
+                  { san: "Nb6", description: "Black retreats the knight to b6, attacking your bishop." },
+                  { san: "Bb3", description: "Black played Nb6. Retreat to b3 — the bishop stays on the strong a2–g8 diagonal and keeps eyeing f7." },
+                  { san: "d5", description: "Black stakes out space with d5. The position is balanced but you have easy, natural development and a clear plan." },
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+];
+
 // ─── Export: tree as source of truth, lines derived ────────────
 interface OpeningMeta {
   id: string;
@@ -1851,6 +2651,12 @@ const openingsWithTrees: OpeningMeta[] = [
   { id: "petrov-defense", name: "Petrov Defense", description: "A counter-attacking answer to 1.e4 e5 2.Nf3, featuring the tricky Stafford Gambit for Black.", tree: petrovTree },
   { id: "scandinavian-defense", name: "Scandinavian Defense", description: "Black strikes at the center with 1...d5, regaining the pawn with quick, active development.", tree: scandinavianTree },
   { id: "bishops-opening", name: "Bishop's Opening", description: "White's 1.e4 e5 2.Bc4 — a flexible, classical setup, here against Black's three main replies.", tree: bishopsOpeningTree },
+  // ── White's 1.e4 repertoire, one opening per reply Black can choose ──
+  // Together with the Ruy López (1...e5) these cover ~87% of what you face.
+  { id: "white-vs-sicilian", name: "Sicilian (as White)", description: "Your answer to 1...c5 (23.3% of replies to 1.e4) — the Open Sicilian, the Alapin, and the Rossolimo/Moscow bishop checks side by side.", tree: whiteVsSicilianTree },
+  { id: "white-vs-french", name: "French (as White)", description: "Your answer to 1...e6 (11.3% of replies to 1.e4) — the Tarrasch, the Advance and the Exchange, so you can pick the system that suits you.", tree: whiteVsFrenchTree },
+  { id: "white-vs-caro-kann", name: "Caro-Kann (as White)", description: "Your answer to 1...c6 (8.3% of replies to 1.e4): the Advance Variation, taking space and playing against Black's bishop.", tree: whiteVsCaroKannTree },
+  { id: "anti-scandinavian", name: "Scandinavian (as White)", description: "Your answer to 1...d5 (8.9% of replies to 1.e4): take on d5 and gain time hunting the black queen.", tree: antiScandinavianTree },
 ];
 
 /** Openings with lines derived from the tree. No redundancy in source data. */
