@@ -56,6 +56,34 @@ export const CONCEPT_ICONS: Record<Concept, string> = {
   allowed_passer: "🏃",
 };
 
+/** Concepts that map to a Lichess puzzle theme ("angle") for external drilling.
+ *  Positional concepts have no clean Lichess tag, so they're omitted. */
+export const CONCEPT_THEMES: Partial<Record<Concept, string>> = {
+  fork: "fork",
+  pin: "pin",
+  skewer: "skewer",
+  discovered_attack: "discoveredAttack",
+  back_rank_mate: "backRankMate",
+  hanging_piece: "hangingPiece",
+  missed_mate: "mate",
+  weakened_king: "kingsideAttack",
+};
+
+/** Raw themed puzzle from Lichess (mirrors `gambit_ingest::LichessPuzzle`). */
+export interface LichessPuzzleRaw {
+  id: string;
+  pgn: string;
+  solution: string[];
+  themes: string[];
+  rating: number;
+}
+
+/** Fetch a random Lichess puzzle for a theme angle (e.g. "fork"). */
+export async function fetchLichessPuzzle(theme: string): Promise<LichessPuzzleRaw> {
+  if (!inTauri) throw new Error("Lichess puzzles require the desktop app.");
+  return await invoke<LichessPuzzleRaw>("lichess_puzzle", { theme });
+}
+
 /** Mirrors `gambit_engine::MoveAnalysis` (serde snake_case). */
 export interface MoveAnalysis {
   ply: number;

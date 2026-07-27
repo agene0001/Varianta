@@ -2,40 +2,92 @@
 import { ref, computed, watch } from 'vue';
 import { Chess } from 'chess.js';
 import ChessBoard from './ChessBoard.vue';
-import { CONCEPT_LABELS, CONCEPT_ICONS, type MoveAnalysis } from '../composables/useAnalysis';
+import {
+  CONCEPT_LABELS,
+  CONCEPT_ICONS,
+  CONCEPT_THEMES,
+  fetchLichessPuzzle,
+  type Concept,
+  type MoveAnalysis,
+} from '../composables/useAnalysis';
 import { opponent, type Game } from '../composables/useGames';
 
 const props = defineProps<{ analyses: MoveAnalysis[]; game: Game }>();
 const emit = defineEmits<{ (e: 'exit'): void }>();
 
-// A mistake with a stored engine line becomes a puzzle: solve from the position
-// you faced, playing the moves Stockfish recommended.
-const puzzles = computed(() =>
-  props.analyses.filter(
-    (a) => (a.severity === 'mistake' || a.severity === 'blunder') && a.best_line?.length,
-  ),
-);
+// A normalized puzzle the solver understands, from either source.
+type Pz = {
+  fen: string;
+  best_line: string[]; // solver plays the even-indexed moves
+  side: 'white' | 'black';
+  concepts: Concept[];
+  source: 'game' | 'lichess';
+  ply?: number;
+  played_uci?: string;
+  cp_loss?: number;
+  rating?: number;
+};
 
+// ── Source A: this game's mistakes ─────────────────────────────
+const gamePuzzles = computed<Pz[]>(() =>
+  props.analyses
+    .filter((a) => (a.severity === 'mistake' || a.severity === 'blunder') && a.best_line?.length)
+    .map((a) => ({
+      fen: a.fen,
+      best_line: a.best_line,
+      side: a.side,
+      concepts: a.concepts,
+      source: 'game',
+      ply: a.ply,
+      played_uci: a.played_uci,
+      cp_loss: a.cp_loss,
+    })),
+);
 const index = ref(0);
-const puzzle = computed<MoveAnalysis | null>(() => puzzles.value[index.value] ?? null);
+
+// ── Source B: Lichess theme drill ──────────────────────────────
+const mode = ref<'game' | 'lichess'>('game');
+const lichessConcept = ref<Concept | null>(null);
+const lichessPuzzle = ref<Pz | null>(null);
+const lichessLoading = ref(false);
+const lichessError = ref('');
+const drillSolved = ref(0);
+const drillDone = ref(0);
+
+// Concepts from this game that Lichess can serve puzzles for.
+const drillableConcepts = computed(() => {
+  const seen = new Set<Concept>();
+  for (const p of gamePuzzles.value) {
+    for (const c of p.concepts) if (CONCEPT_THEMES[c]) seen.add(c);
+  }
+  return [...seen];
+});
+
+const puzzle = computed<Pz | null>(() =>
+  mode.value === 'lichess' ? lichessPuzzle.value : gamePuzzles.value[index.value] ?? null,
+);
 const solverColor = computed<'white' | 'black'>(() => puzzle.value?.side ?? 'white');
 
+// ── Solving state ──────────────────────────────────────────────
 type Status = 'solving' | 'wrong' | 'solved' | 'revealed';
 const status = ref<Status>('solving');
-const stepIndex = ref(0); // index into best_line of the next move the solver must find
+const stepIndex = ref(0); // index into best_line of the next move to find
 const attempts = ref(0);
-const results = ref<Record<number, 'solved' | 'failed'>>({});
+const results = ref<Record<number, 'solved' | 'failed'>>({}); // game mode, by index
 
 let boardApi: any = null;
-let sim = new Chess(); // mirrors the board position, for UCI→SAN of replies
+let sim = new Chess(); // mirrors the board, for UCI→SAN of replies
 const isReplaying = ref(false);
 
 const solvedCount = computed(
   () => Object.values(results.value).filter((r) => r === 'solved').length,
 );
 const attempted = computed(() => Object.keys(results.value).length);
+const revealDone = computed(() => status.value === 'solved' || status.value === 'revealed');
 
 const prompt = computed(() => {
+  if (lichessLoading.value) return 'Loading puzzle…';
+  if (lichessError.value) return 'Could not load a puzzle';
   switch (status.value) {
     case 'solved':
       return 'Solved ✓';
@@ -64,11 +116,17 @@ function onBoardCreated(api: any) {
   loadPuzzle();
 }
 
-watch(index, loadPuzzle);
+// Reload whenever the active puzzle changes (index, mode, or a new Lichess fetch).
+watch(puzzle, loadPuzzle);
 
 function recordResult(r: 'solved' | 'failed') {
-  if (!(index.value in results.value)) {
-    results.value = { ...results.value, [index.value]: r };
+  if (mode.value === 'game') {
+    if (!(index.value in results.value)) {
+      results.value = { ...results.value, [index.value]: r };
+    }
+  } else {
+    drillDone.value++;
+    if (r === 'solved') drillSolved.value++;
   }
 }
 
@@ -80,8 +138,7 @@ function finishSolved() {
 function onMove(move: any) {
   if (isReplaying.value) return; // our own reply move
   if (status.value !== 'solving') {
-    // A move made while feedback is showing — snap it back.
-    setTimeout(() => boardApi?.undoLastMove(), 40);
+    setTimeout(() => boardApi?.undoLastMove(), 40); // snap back moves during feedback
     return;
   }
   const p = puzzle.value;
@@ -91,11 +148,8 @@ function onMove(move: any) {
     sim.move({ from: move.from, to: move.to, promotion: move.promotion });
     boardApi?.setShapes([]);
     stepIndex.value++;
-    if (stepIndex.value >= p.best_line.length) {
-      finishSolved();
-    } else {
-      setTimeout(playReply, 430);
-    }
+    if (stepIndex.value >= p.best_line.length) finishSolved();
+    else setTimeout(playReply, 430);
   } else {
     status.value = 'wrong';
     attempts.value++;
@@ -106,7 +160,6 @@ function onMove(move: any) {
   }
 }
 
-// Play the opponent's reply (odd steps of the line) programmatically.
 function playReply() {
   const p = puzzle.value;
   if (!p || !boardApi) return;
@@ -128,7 +181,6 @@ function playReply() {
 function hint() {
   const p = puzzle.value;
   if (!p || !boardApi || status.value !== 'solving') return;
-  // Circle the piece to move — a nudge, not the full answer.
   boardApi.setShapes([{ orig: p.best_line[stepIndex.value].slice(0, 2), brush: 'green' }]);
 }
 
@@ -159,22 +211,69 @@ function playRemaining() {
 }
 
 function next() {
-  if (index.value < puzzles.value.length - 1) index.value++;
+  if (mode.value === 'lichess') {
+    loadLichess();
+    return;
+  }
+  if (index.value < gamePuzzles.value.length - 1) index.value++;
 }
 function prev() {
-  if (index.value > 0) index.value--;
+  if (mode.value === 'game' && index.value > 0) index.value--;
 }
 function restart() {
   loadPuzzle();
 }
 
-// The move actually played in the game, in SAN (shown after solving/revealing).
+// ── Lichess drill ──────────────────────────────────────────────
+async function startLichessDrill(c: Concept) {
+  if (!CONCEPT_THEMES[c]) return;
+  lichessConcept.value = c;
+  mode.value = 'lichess';
+  drillSolved.value = 0;
+  drillDone.value = 0;
+  await loadLichess();
+}
+
+async function loadLichess() {
+  const c = lichessConcept.value;
+  const theme = c ? CONCEPT_THEMES[c] : null;
+  if (!theme) return;
+  lichessLoading.value = true;
+  lichessError.value = '';
+  try {
+    const raw = await fetchLichessPuzzle(theme);
+    // The puzzle position is reached by playing the entire PGN; the side then to
+    // move is the solver, and solution[0] is the solver's first move.
+    const board = new Chess();
+    for (const san of raw.pgn.split(' ').filter(Boolean)) board.move(san);
+    lichessPuzzle.value = {
+      fen: board.fen(),
+      best_line: raw.solution,
+      side: board.turn() === 'w' ? 'white' : 'black',
+      concepts: c ? [c] : [],
+      source: 'lichess',
+      rating: raw.rating,
+    };
+  } catch (e) {
+    lichessError.value = String(e);
+  } finally {
+    lichessLoading.value = false;
+  }
+}
+
+function exitLichessDrill() {
+  mode.value = 'game';
+  lichessPuzzle.value = null;
+  lichessConcept.value = null;
+  lichessError.value = '';
+}
+
+// ── Display helpers ────────────────────────────────────────────
 const playedSan = computed(() => {
   const p = puzzle.value;
-  if (!p) return '';
+  if (!p?.played_uci) return '';
   try {
-    const c = new Chess(p.fen);
-    return c.move({
+    return new Chess(p.fen).move({
       from: p.played_uci.slice(0, 2),
       to: p.played_uci.slice(2, 4),
       promotion: p.played_uci.slice(4) || undefined,
@@ -184,20 +283,35 @@ const playedSan = computed(() => {
   }
 });
 
-const revealDone = computed(() => status.value === 'solved' || status.value === 'revealed');
+// Short pattern name for a drill button ("Missed a fork" → "fork").
+function drillLabel(c: Concept): string {
+  return CONCEPT_LABELS[c].replace(/^Missed (a |an )?/i, '').replace(/^Hangs a piece$/i, 'hanging piece');
+}
 </script>
 
 <template>
   <section class="puzzles">
     <header class="pz-header">
-      <button class="pz-back" @click="emit('exit')">← Analysis</button>
-      <div class="pz-title">Mistake trainer — {{ game.white }} vs {{ game.black }}</div>
-      <div v-if="puzzles.length" class="pz-progress">
-        Puzzle {{ index + 1 }} / {{ puzzles.length }} · solved {{ solvedCount }}
+      <button v-if="mode === 'lichess'" class="pz-back" @click="exitLichessDrill">
+        ← Game puzzles
+      </button>
+      <button v-else class="pz-back" @click="emit('exit')">← Analysis</button>
+
+      <div v-if="mode === 'lichess'" class="pz-title">
+        Drill: {{ lichessConcept ? drillLabel(lichessConcept) : '' }} · Lichess
+      </div>
+      <div v-else class="pz-title">Mistake trainer — {{ game.white }} vs {{ game.black }}</div>
+
+      <div v-if="mode === 'lichess'" class="pz-progress">
+        <span v-if="puzzle?.rating">rating {{ puzzle.rating }} · </span>solved
+        {{ drillSolved }}/{{ drillDone }}
+      </div>
+      <div v-else-if="gamePuzzles.length" class="pz-progress">
+        Puzzle {{ index + 1 }} / {{ gamePuzzles.length }} · solved {{ solvedCount }}
       </div>
     </header>
 
-    <div v-if="!puzzles.length" class="pz-empty">
+    <div v-if="!gamePuzzles.length" class="pz-empty">
       <p>No trainable mistakes in this game.</p>
       <p class="pz-hint-text">
         Either you played cleanly, or this analysis predates stored engine lines —
@@ -219,20 +333,23 @@ const revealDone = computed(() => status.value === 'solved' || status.value === 
       <aside class="pz-panel">
         <div class="pz-prompt" :class="status">{{ prompt }}</div>
 
-        <div class="pz-context">
-          Move {{ Math.ceil(puzzle!.ply / 2) }} · vs {{ opponent(game) }}
-        </div>
+        <div v-if="lichessError" class="pz-error">{{ lichessError }}</div>
 
-        <!-- Concepts are a hint, so only reveal them once solved/shown. -->
-        <div v-if="revealDone && puzzle!.concepts.length" class="pz-concepts">
+        <div v-if="mode === 'game'" class="pz-context">
+          Move {{ Math.ceil((puzzle?.ply ?? 0) / 2) }} · vs {{ opponent(game) }}
+        </div>
+        <div v-else class="pz-context">Lichess puzzle · drilling {{ lichessConcept ? drillLabel(lichessConcept) : '' }}</div>
+
+        <!-- Concepts are a hint, so only reveal them once solved/shown (game mode). -->
+        <div v-if="mode === 'game' && revealDone && puzzle?.concepts.length" class="pz-concepts">
           <span v-for="c in puzzle!.concepts" :key="c" class="pz-chip">
             {{ CONCEPT_ICONS[c] }} {{ CONCEPT_LABELS[c] }}
           </span>
         </div>
 
-        <div v-if="revealDone" class="pz-played">
+        <div v-if="mode === 'game' && revealDone && puzzle?.played_uci" class="pz-played">
           In the game you played <code>{{ playedSan }}</code>, losing
-          <span class="pz-loss">{{ (puzzle!.cp_loss / 100).toFixed(1) }}</span>.
+          <span class="pz-loss">{{ ((puzzle!.cp_loss ?? 0) / 100).toFixed(1) }}</span>.
         </div>
 
         <div class="pz-controls">
@@ -241,18 +358,43 @@ const revealDone = computed(() => status.value === 'solved' || status.value === 
           <button class="pz-btn" @click="restart">Restart</button>
         </div>
         <div class="pz-nav">
-          <button class="pz-btn" :disabled="index === 0" @click="prev">‹ Prev</button>
+          <button
+            v-if="mode === 'game'"
+            class="pz-btn"
+            :disabled="index === 0"
+            @click="prev"
+          >
+            ‹ Prev
+          </button>
           <button
             class="pz-btn primary"
-            :disabled="index >= puzzles.length - 1"
+            :disabled="mode === 'game' && index >= gamePuzzles.length - 1"
             @click="next"
           >
-            Next ›
+            {{ mode === 'lichess' ? 'New puzzle ›' : 'Next ›' }}
           </button>
         </div>
 
-        <div v-if="attempted >= puzzles.length" class="pz-summary">
-          Done — solved {{ solvedCount }} of {{ puzzles.length }} first try.
+        <div
+          v-if="mode === 'game' && attempted >= gamePuzzles.length"
+          class="pz-summary"
+        >
+          Done — solved {{ solvedCount }} of {{ gamePuzzles.length }} first try.
+        </div>
+
+        <!-- Drill the same patterns beyond this game, from Lichess's tagged DB. -->
+        <div v-if="mode === 'game' && drillableConcepts.length" class="pz-drills">
+          <div class="pz-drills-label">Drill this pattern on Lichess</div>
+          <div class="pz-drills-btns">
+            <button
+              v-for="c in drillableConcepts"
+              :key="c"
+              class="pz-btn drill"
+              @click="startLichessDrill(c)"
+            >
+              {{ CONCEPT_ICONS[c] }} {{ drillLabel(c) }}
+            </button>
+          </div>
         </div>
       </aside>
     </div>
@@ -344,6 +486,11 @@ const revealDone = computed(() => status.value === 'solved' || status.value === 
   color: #e0c200;
 }
 
+.pz-error {
+  color: #ff8a8a;
+  font-size: 13px;
+}
+
 .pz-context {
   color: var(--text-muted);
   font-size: 13px;
@@ -424,6 +571,31 @@ const revealDone = computed(() => status.value === 'solved' || status.value === 
   border: 1px solid rgba(0, 245, 184, 0.3);
   color: var(--accent-green);
   font-size: 13px;
+}
+
+.pz-drills {
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.pz-drills-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.pz-drills-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pz-btn.drill {
+  flex: 0 0 auto;
+  text-transform: capitalize;
 }
 
 @media (max-width: 780px) {

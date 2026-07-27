@@ -158,6 +158,67 @@ struct ArchivesList {
     archives: Vec<String>,
 }
 
+// ---- Lichess puzzle API (https://lichess.org/api/puzzle/next?angle=THEME) ----
+
+/// A themed puzzle from Lichess's (CC0) puzzle database.
+///
+/// Convention: play the **entire** `pgn` to reach the puzzle position; the side
+/// then to move is the solver, and the solver plays the **even-indexed** moves of
+/// `solution` (the odd-indexed ones are the opponent's replies). This matches the
+/// own-game puzzle format, so both feed the same solver UI.
+#[derive(Debug, serde::Serialize, Deserialize)]
+pub struct LichessPuzzle {
+    pub id: String,
+    pub pgn: String,
+    pub solution: Vec<String>,
+    pub themes: Vec<String>,
+    #[serde(default)]
+    pub rating: i32,
+}
+
+#[derive(Deserialize)]
+struct LichessResponse {
+    game: LichessGame,
+    puzzle: LichessPuzzleInner,
+}
+
+#[derive(Deserialize)]
+struct LichessGame {
+    pgn: String,
+}
+
+#[derive(Deserialize)]
+struct LichessPuzzleInner {
+    id: String,
+    #[serde(default)]
+    rating: i32,
+    solution: Vec<String>,
+    themes: Vec<String>,
+}
+
+/// Fetch a random Lichess puzzle for a theme "angle" (e.g. `"fork"`, `"pin"`,
+/// `"backRankMate"`). Anonymous — Lichess serves a themed puzzle without auth.
+pub async fn fetch_lichess_puzzle(theme: &str) -> Result<LichessPuzzle, IngestError> {
+    let http = reqwest::Client::builder()
+        .user_agent(concat!("varianta/", env!("CARGO_PKG_VERSION")))
+        .build()?;
+    let url = format!("https://lichess.org/api/puzzle/next?angle={theme}");
+    let resp: LichessResponse = http
+        .get(url)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    Ok(LichessPuzzle {
+        id: resp.puzzle.id,
+        pgn: resp.game.pgn,
+        solution: resp.puzzle.solution,
+        themes: resp.puzzle.themes,
+        rating: resp.puzzle.rating,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

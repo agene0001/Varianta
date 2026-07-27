@@ -142,6 +142,15 @@ async fn get_game_analysis(
     }
 }
 
+/// Fetch a themed Lichess puzzle — external practice for a specific concept
+/// (e.g. "fork"), used to drill a pattern beyond a player's own games.
+#[tauri::command]
+async fn lichess_puzzle(theme: String) -> Result<gambit_ingest::LichessPuzzle, String> {
+    gambit_ingest::fetch_lichess_puzzle(&theme)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -178,7 +187,8 @@ pub fn run() {
             set_engine_path,
             verify_engine,
             analyze_game,
-            get_game_analysis
+            get_game_analysis,
+            lichess_puzzle
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
