@@ -5,9 +5,10 @@
       :key="i"
       class="tree-row"
       :class="{
-        'is-leaf':   row.isLeaf,
-        'is-active': row.isLeaf && row.lineIndex === currentLineIndex,
-        'is-trunk':  !row.isLeaf,
+        'is-leaf':    row.isLeaf,
+        'is-active':  row.isLeaf && row.lineIndex === currentLineIndex,
+        'is-trunk':   !row.isLeaf,
+        'is-learned': row.isLeaf && !!row.lineName && learnedLines?.has(row.lineName),
       }"
       @click="handleRowClick(row)"
     >
@@ -40,6 +41,11 @@
           @click.stop="selectMode && onChipClick(row, mi)"
         >{{ move }}</span>
         <span v-if="row.isLeaf"  class="line-name">{{ row.lineName }}</span>
+        <span
+          v-if="row.isLeaf && !!row.lineName && learnedLines?.has(row.lineName)"
+          class="line-learned"
+          title="Learned"
+        >✓</span>
         <span v-else-if="row.trunkKey" class="collapse-icon" @click.stop="toggleTrunk(row.trunkKey!)">{{ row.isCollapsed ? '▸' : '▾' }}</span>
       </div>
     </div>
@@ -59,6 +65,8 @@ interface Props {
   nextMove?: string | null
   /** When true, clicking any row (leaf or branch) emits branchSelected with the path; used for "start from" picker */
   selectMode?: boolean
+  /** Names of lines already learned — leaf rows for these get the "learned" styling. */
+  learnedLines?: Set<string>
 }
 
 const props = withDefaults(defineProps<Props>(), { selectMode: false, playedMoves: () => [], nextMove: null })
@@ -486,6 +494,22 @@ const rows = computed((): DisplayRow[] => {
 .tree-row.is-active .line-name {
   color: var(--accent-green) !important;
   font-weight: 600;
+}
+
+/* ── Learned lines ───────────────────────────────────────────── */
+/* `is-active` already owns green, so learned leaves are marked with a cyan tick
+   and a left rail. Both classes can apply at once (the selected line is often
+   one you have just learned), so these must not fight over the same property. */
+.tree-row.is-learned {
+  box-shadow: inset 2px 0 0 var(--accent-cyan);
+}
+
+.line-learned {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--accent-cyan);
+  margin-left: 4px;
+  flex-shrink: 0;
 }
 
 /* ── Collapse arrow ──────────────────────────────────────────── */

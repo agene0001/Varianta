@@ -151,6 +151,7 @@
                             :current-line-index="currentLineIndex"
                             :played-moves="playedMoves"
                             :next-move="nextMove"
+                            :learned-lines="learnedLines"
                             @line-changed="(i) => $emit('lineChanged', i)"
                         />
 
@@ -159,11 +160,19 @@
                             <button
                                 v-for="(line, index) in opening.lines"
                                 :key="index"
-                                :class="['variation-btn', { active: index === currentLineIndex }]"
+                                :class="['variation-btn', {
+                                    active: index === currentLineIndex,
+                                    learned: learnedLines?.has(line.name),
+                                }]"
                                 @click="$emit('lineChanged', index)"
                             >
                                 <span class="variation-index">{{ index + 1 }}</span>
                                 <span class="variation-name">{{ line.name }}</span>
+                                <span
+                                    v-if="learnedLines?.has(line.name)"
+                                    class="variation-learned"
+                                    title="Learned"
+                                >✓</span>
                                 <span v-if="index === currentLineIndex" class="variation-dot" />
                             </button>
                         </template>
@@ -186,6 +195,8 @@ interface Props {
     currentMode: "learn" | "practice" | "drill" | "time";
     linesDiscovered: number;
     linesPerfected: number;
+    /** Names of lines already learned, for the learned/unlearned styling. */
+    learnedLines?: Set<string>;
     status: string;
     description: string;
     playedMoves?: string[];
@@ -582,6 +593,29 @@ const statusClass = computed(() => {
     background: rgba(76, 175, 80, 0.1);
     border-color: var(--accent-green);
     color: var(--accent-green);
+}
+
+/* Learned lines recede so the eye lands on what is still left to study.
+   `active` uses the same green, so learned rows are marked with a tick and a
+   left rail rather than a fill, and the two states stay distinguishable when a
+   learned line is also the selected one. */
+.variation-btn.learned {
+    border-left: 2px solid var(--accent-cyan);
+}
+
+.variation-btn.learned .variation-name {
+    color: var(--text-secondary);
+}
+
+.variation-btn.learned:hover .variation-name {
+    color: var(--text-primary);
+}
+
+.variation-learned {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--accent-cyan);
+    flex-shrink: 0;
 }
 
 .variation-index {

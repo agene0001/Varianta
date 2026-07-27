@@ -153,7 +153,10 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  whiteOpeningIds: () => ['italian-game', 'ruy-lopez', 'queens-gambit', 'english-opening', 'catalan-opening'],
+  whiteOpeningIds: () => [
+    'italian-game', 'ruy-lopez', 'queens-gambit', 'english-opening', 'catalan-opening', 'bishops-opening',
+    'white-vs-sicilian', 'white-vs-french', 'white-vs-caro-kann', 'anti-scandinavian',
+  ],
 });
 
 const emit = defineEmits<{

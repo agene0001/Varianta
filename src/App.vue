@@ -112,6 +112,7 @@
             :current-mode="gameMode"
             :lines-discovered="linesDiscovered"
             :lines-perfected="linesPerfected"
+            :learned-lines="learnedLineNames"
             :status="practiceStatus"
             :description="currentDescription"
             :played-moves="playedMoves"
@@ -201,7 +202,68 @@ const openings = ref<Opening[]>([]);
 
 const emptyStored = { linesByOpening: {} as Record<string, Line[]>, newOpenings: [] as Opening[] };
 
+interface LineProgress {
+  lineId?: string;
+  openingId?: string;
+  mastered: boolean;
+}
+
+/**
+ * Reactive mirror of the `progress-*` entries in localStorage, keyed by
+ * `progressKey()`.
+ *
+ * The counters used to read localStorage directly from a computed. Vue cannot
+ * track localStorage, so those computeds never re-evaluated after a line was
+ * completed — the "lines discovered/perfected" totals only refreshed when the
+ * component remounted, i.e. after restarting the app. Going through a ref means
+ * writing progress updates the UI immediately.
+ */
+const progress = ref<Record<string, LineProgress>>({});
+
+const progressKey = (openingId: string, lineName: string) =>
+  `progress-${openingId}-${lineName}`;
+
+function loadProgress(): void {
+  const loaded: Record<string, LineProgress> = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key?.startsWith('progress-')) continue;
+    try {
+      loaded[key] = JSON.parse(localStorage.getItem(key) ?? '') as LineProgress;
+    } catch {
+      // A malformed entry still means the line was reached at some point; treat
+      // it as learned rather than dropping the user's progress on the floor.
+      loaded[key] = { mastered: true };
+    }
+  }
+  progress.value = loaded;
+}
+
+/**
+ * The Scandinavian lines used to live inside the `ruy-lopez` opening and now have
+ * their own `anti-scandinavian` opening. Progress is keyed by opening id + line
+ * name, so without this the old drill progress would be silently orphaned.
+ * One-time, idempotent, and safe to keep: after the first run there is nothing left
+ * to move.
+ */
+function migrateScandinavianProgress(): void {
+  const prefix = 'progress-ruy-lopez-Scandinavian: ';
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const oldKey = localStorage.key(i);
+    if (!oldKey?.startsWith(prefix)) continue;
+    const lineName = oldKey.slice('progress-ruy-lopez-'.length);
+    const newKey = `progress-anti-scandinavian-${lineName}`;
+    const value = localStorage.getItem(oldKey);
+    if (value !== null && localStorage.getItem(newKey) === null) {
+      localStorage.setItem(newKey, value);
+    }
+    localStorage.removeItem(oldKey);
+  }
+}
+
 onMounted(async () => {
+  migrateScandinavianProgress();
+  loadProgress();
   try {
     const DB_TIMEOUT = 8000;
     await Promise.race([
@@ -297,7 +359,13 @@ const onImportFile = async (e: Event) => {
 const selectedOpening = ref<Opening | null>(null);
 const currentLineIndex = ref(0);
 
-const BUILT_IN_WHITE_OPENINGS = ['italian-game', 'ruy-lopez', 'queens-gambit', 'english-opening', 'catalan-opening', 'bishops-opening'];
+const BUILT_IN_WHITE_OPENINGS = [
+  'italian-game', 'ruy-lopez', 'queens-gambit', 'english-opening', 'catalan-opening', 'bishops-opening',
+  // White's 1.e4 repertoire by Black's reply. These share names with the Black-side
+  // openings (sicilian-defense, french-defense, caro-kann) but are distinct ids, so
+  // the board orientation and drill side resolve independently.
+  'white-vs-sicilian', 'white-vs-french', 'white-vs-caro-kann', 'anti-scandinavian',
+];
 
 function getOpeningColor(openingId: string): 'white' | 'black' {
   if (BUILT_IN_WHITE_OPENINGS.includes(openingId)) return 'white';
@@ -362,22 +430,33 @@ const nextMove = computed(() => {
   return selectedLine.value.moves[currentMoveIndex.value]?.san ?? null;
 });
 
-const linesDiscovered = computed(() => {
-  if (!selectedOpening.value) return 0;
-  return selectedOpening.value.lines.filter(line => {
-    const key = `progress-${selectedOpening.value!.id}-${line.name}`;
-    return localStorage.getItem(key) !== null;
-  }).length;
+/**
+ * Names of the lines in the current opening that have been learned. Derived from
+ * `progress`, so it updates the moment a line is completed.
+ *
+ * Only lines that still exist in the opening are counted, so progress left over
+ * from a renamed or removed line can never push the totals above the real line
+ * count.
+ */
+const learnedLineNames = computed<Set<string>>(() => {
+  if (!selectedOpening.value) return new Set();
+  const openingId = selectedOpening.value.id;
+  return new Set(
+    selectedOpening.value.lines
+      .filter(line => progress.value[progressKey(openingId, line.name)]?.mastered)
+      .map(line => line.name),
+  );
 });
 
-const linesPerfected = computed(() => {
+const linesDiscovered = computed(() => {
   if (!selectedOpening.value) return 0;
-  return selectedOpening.value.lines.filter(line => {
-    const key = `progress-${selectedOpening.value!.id}-${line.name}`;
-    const data = localStorage.getItem(key);
-    return data && JSON.parse(data).mastered;
-  }).length;
+  const openingId = selectedOpening.value.id;
+  return selectedOpening.value.lines.filter(
+    line => progress.value[progressKey(openingId, line.name)] !== undefined,
+  ).length;
 });
+
+const linesPerfected = computed(() => learnedLineNames.value.size);
 
 const selectOpening = (opening: Opening) => {
   selectedOpening.value = opening;
@@ -524,15 +603,17 @@ const onStepBack = () => stepBack();
 
 const saveMastery = () => {
   if (!selectedOpening.value || !selectedLine.value) return;
-  const progress = {
+  const key = progressKey(selectedOpening.value.id, selectedLine.value.name);
+  // Already learned — nothing to record. Completing a line a second time should
+  // not rewrite the entry or disturb the counters.
+  if (progress.value[key]?.mastered) return;
+  const entry: LineProgress = {
     lineId: selectedLine.value.name,
     openingId: selectedOpening.value.id,
     mastered: true,
   };
-  localStorage.setItem(
-    `progress-${selectedOpening.value.id}-${selectedLine.value.name}`,
-    JSON.stringify(progress)
-  );
+  localStorage.setItem(key, JSON.stringify(entry));
+  progress.value[key] = entry;
 };
 
 const goHome = () => {
