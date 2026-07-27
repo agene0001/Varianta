@@ -118,8 +118,16 @@ pub enum EngineError {
 }
 
 /// Best-effort auto-detection of a Stockfish binary — the default when no engine
-/// path is configured. Checks, in order: the `STOCKFISH_PATH` env var, En
-/// Croissant's bundled engine (macOS), then `stockfish` on `PATH`.
+/// path is configured.
+///
+/// `STOCKFISH_PATH` wins outright. Otherwise every candidate is collected —
+/// `stockfish` on `PATH` first, then En Croissant's engine directory — and the
+/// one whose filename best matches the host CPU wins; ties go to the earlier
+/// source. Order alone isn't enough: on Apple Silicon the old "En Croissant
+/// first, first `read_dir` hit wins" logic happily returned
+/// `stockfish-macos-x86-64-sse41-popcnt` and ran it under Rosetta at roughly
+/// half the nodes/second of a native arm64 build, even with a native Stockfish
+/// sitting on `PATH`.
 pub fn detect_engine_path() -> Option<std::path::PathBuf> {
     use std::path::PathBuf;
 
@@ -127,6 +135,19 @@ pub fn detect_engine_path() -> Option<std::path::PathBuf> {
         let pb = PathBuf::from(p);
         if pb.is_file() {
             return Some(pb);
+        }
+    }
+
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    // `stockfish` on `PATH` — usually a package-manager build for the host arch,
+    // so it's checked first and wins any tie on architecture score.
+    if let Ok(path) = std::env::var("PATH") {
+        for dir in std::env::split_paths(&path) {
+            let cand = dir.join("stockfish");
+            if cand.is_file() {
+                candidates.push(cand);
+            }
         }
     }
 
@@ -139,23 +160,54 @@ pub fn detect_engine_path() -> Option<std::path::PathBuf> {
                 let name = entry.file_name();
                 let name = name.to_string_lossy();
                 if name.starts_with("stockfish") && !name.contains('.') && entry.path().is_file() {
-                    return Some(entry.path());
+                    candidates.push(entry.path());
                 }
             }
         }
     }
 
-    // `stockfish` on PATH.
-    if let Ok(path) = std::env::var("PATH") {
-        for dir in std::env::split_paths(&path) {
-            let cand = dir.join("stockfish");
-            if cand.is_file() {
-                return Some(cand);
-            }
+    // Strictly-greater comparison keeps the earliest candidate on a tie, so
+    // `read_dir`'s arbitrary ordering can't decide which engine we launch.
+    let mut best: Option<(u8, PathBuf)> = None;
+    for cand in candidates {
+        let score = arch_score(&cand);
+        if best.as_ref().map_or(true, |(s, _)| score > *s) {
+            best = Some((score, cand));
         }
     }
+    best.map(|(_, path)| path)
+}
 
-    None
+/// Rank a candidate engine by how well its filename matches the host CPU:
+/// 2 = names this architecture, 1 = says nothing, 0 = names a foreign one.
+///
+/// Stockfish's official builds encode the target in the filename
+/// (`stockfish-macos-m1-apple-silicon` vs `stockfish-macos-x86-64-sse41-popcnt`),
+/// so the name is a reliable signal without parsing Mach-O/ELF headers. A plain
+/// `stockfish` (Homebrew, apt) scores 1, which still beats a foreign-arch build.
+fn arch_score(path: &std::path::Path) -> u8 {
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
+
+    const ARM_MARKERS: [&str; 4] = ["apple-silicon", "aarch64", "arm64", "armv8"];
+    const X86_MARKERS: [&str; 4] = ["x86-64", "x86_64", "avx2", "sse41"];
+
+    let names_arm = ARM_MARKERS.iter().any(|m| name.contains(m));
+    let names_x86 = X86_MARKERS.iter().any(|m| name.contains(m));
+
+    let (native, foreign) = if cfg!(target_arch = "aarch64") {
+        (names_arm, names_x86)
+    } else {
+        (names_x86, names_arm)
+    };
+
+    match (native, foreign) {
+        (true, _) => 2,
+        (false, true) => 0,
+        (false, false) => 1,
+    }
 }
 
 /// A running Stockfish (or any UCI engine) process, driven over stdin/stdout.
@@ -415,6 +467,27 @@ impl UciEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn arch_score_prefers_native_build() {
+        use std::path::Path;
+        let arm = Path::new("/e/stockfish-macos-m1-apple-silicon");
+        let x86 = Path::new("/e/stockfish-macos-x86-64-sse41-popcnt");
+        let plain = Path::new("/opt/homebrew/bin/stockfish");
+
+        // A bare `stockfish` (Homebrew/apt) must outrank a foreign-arch build,
+        // and the matching build must outrank both.
+        let (native, foreign) = if cfg!(target_arch = "aarch64") {
+            (arm, x86)
+        } else {
+            (x86, arm)
+        };
+        assert_eq!(arch_score(native), 2);
+        assert_eq!(arch_score(plain), 1);
+        assert_eq!(arch_score(foreign), 0);
+        assert!(arch_score(native) > arch_score(plain));
+        assert!(arch_score(plain) > arch_score(foreign));
+    }
 
     #[test]
     fn parses_centipawn_info() {
