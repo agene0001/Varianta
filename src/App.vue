@@ -869,15 +869,23 @@ watch(currentLineIndex, () => {
 }
 
 /* ── Bottom Toolbar ──────────────────────────────────────── */
+/* Pinned footer. On desktop the flex column already held it in place, but in the
+   stacked mobile layout .game-screen becomes the scroller and the toolbar used
+   to scroll away with the page. `sticky` keeps it docked in both layouts; the
+   background is opaque enough (plus a blur) to sit over scrolling content. */
 .bottom-toolbar {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem 1.5rem;
-  background: linear-gradient(180deg, rgba(14, 18, 36, 0.4) 0%, rgba(14, 18, 36, 0.9) 100%);
+  background: linear-gradient(180deg, rgba(14, 18, 36, 0.92) 0%, rgba(10, 12, 27, 0.98) 100%);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-top: 1px solid var(--border-color);
   flex-shrink: 0;
-  position: relative;
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
 }
 
 .bottom-toolbar::before {
