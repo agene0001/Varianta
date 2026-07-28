@@ -859,7 +859,9 @@ watch(currentLineIndex, () => {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  /* Not scrollable: the sidebar sizes itself to this column and scrolls its
+     variations list internally. A scroller here would be a second one. */
+  overflow: hidden;
 }
 
 /* ── Bottom Toolbar ──────────────────────────────────────── */
@@ -946,7 +948,21 @@ watch(currentLineIndex, () => {
 
   .sidebar-column {
     flex: none;
-    overflow-y: visible;
+    /* Full shorthand, not just overflow-y: a lone `visible` next to a
+       non-visible overflow-x computes to `auto` and would re-introduce a
+       nested scroller on mobile, where the page itself should scroll. */
+    overflow: visible;
+  }
+
+  /* Stacked layout scrolls as one page, so the sidebar and its list grow to
+     fit their content instead of competing for a fixed height. */
+  .sidebar-column :deep(.sidebar) {
+    height: auto;
+    overflow: visible;
+  }
+
+  .sidebar-column :deep(.variations-panel) {
+    max-height: 60vh;
   }
 }
 .home-header {

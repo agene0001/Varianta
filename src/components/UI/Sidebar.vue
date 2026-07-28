@@ -119,7 +119,11 @@
         </div>
 
         <!-- ── Variations panel ──────────────────────────────── -->
-        <div v-if="currentMode !== 'drill'" class="variations-section">
+        <div
+            v-if="currentMode !== 'drill'"
+            class="variations-section"
+            :class="{ expanded: variationsOpen }"
+        >
 
             <!-- Collapse toggle row -->
             <button class="variations-toggle" @click="variationsOpen = !variationsOpen">
@@ -243,11 +247,17 @@ const statusClass = computed(() => {
 </script>
 
 <style scoped>
+/* Everything above the variations list is fixed-size and the list takes the
+   leftover height, so in normal use nothing here overflows and the list is the
+   only thing that scrolls. `auto` rather than `hidden` is a safety valve: on a
+   very short window the list bottoms out at its min-height and the sidebar
+   scrolls instead of silently clipping the mode buttons. */
 .sidebar {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
     height: 100%;
+    min-height: 0;
     overflow-y: auto;
 }
 
@@ -461,10 +471,19 @@ const statusClass = computed(() => {
 
 /* ── Variations section ──────────────────────────────────── */
 .variations-section {
+    display: flex;
+    flex-direction: column;
     border: 1px solid var(--border-color);
     border-radius: 10px;
     overflow: hidden;
     background: linear-gradient(180deg, rgba(14, 18, 36, 0.95) 0%, rgba(10, 12, 27, 0.95) 100%);
+}
+
+/* Only claim the leftover height while open; collapsed it shrinks to the
+   toggle row rather than leaving a tall empty box. */
+.variations-section.expanded {
+    flex: 1;
+    min-height: 0;
 }
 
 .variations-toggle {
@@ -521,6 +540,10 @@ const statusClass = computed(() => {
 
 /* ── Body ────────────────────────────────────────────────── */
 .variations-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
     border-top: 1px solid var(--border-color);
 }
 
@@ -553,9 +576,14 @@ const statusClass = computed(() => {
 }
 
 /* ── Scrollable panel ────────────────────────────────────── */
+/* The single scroll region in the sidebar. Height comes from the flex chain
+   above rather than a fixed cap, so the list uses whatever space is left. The
+   min-height stops it collapsing to nothing on a short window — below that the
+   sidebar takes over the scrolling. */
 .variations-panel {
     padding: 0.4rem;
-    max-height: 260px;
+    flex: 1;
+    min-height: 140px;
     overflow-y: auto;
 }
 
