@@ -23,6 +23,17 @@
     --accent-soft: rgba(0, 245, 184, 0.15);
     --accent-glow: rgba(0, 245, 184, 0.45);
 
+    /* ── Learned / unlearned line status ─────────────────── */
+    /* Rose is the complement of --accent-green on the wheel, so the two read as
+       a pair: rose = still to learn, green = learned. Fills are kept low-alpha
+       because every row in a long variation list carries one. */
+    --status-unlearned: #ff4d6d;
+    --status-unlearned-fill: rgba(255, 77, 109, 0.11);
+    --status-unlearned-fill-hover: rgba(255, 77, 109, 0.18);
+    --status-learned: var(--accent-green);
+    --status-learned-fill: rgba(0, 245, 184, 0.11);
+    --status-learned-fill-hover: rgba(0, 245, 184, 0.18);
+
     /* Legacy aliases (still referenced across the codebase) */
     --accent-cyan: var(--accent-blue);
     --accent-cyan-soft: rgba(0, 180, 255, 0.15);

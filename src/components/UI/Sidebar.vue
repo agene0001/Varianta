@@ -573,8 +573,13 @@ const statusClass = computed(() => {
     gap: 0.6rem;
     width: 100%;
     padding: 0.5rem 0.75rem;
-    background: transparent;
+    /* Every line carries a status fill: rose until it has been learned, green
+       once it has. Selection is a separate channel (the ring below), so a line
+       can show "learned" and "currently selected" at the same time without the
+       two colours fighting. */
+    background: var(--status-unlearned-fill);
     border: 1px solid transparent;
+    border-left: 3px solid var(--status-unlearned);
     border-radius: 8px;
     color: var(--text-secondary);
     cursor: pointer;
@@ -584,23 +589,25 @@ const statusClass = computed(() => {
 }
 
 .variation-btn:hover {
-    background: var(--bg-card-hover);
+    background: var(--status-unlearned-fill-hover);
     color: var(--text-primary);
-    border-color: var(--border-color);
 }
 
-.variation-btn.active {
-    background: rgba(76, 175, 80, 0.1);
-    border-color: var(--accent-green);
-    color: var(--accent-green);
-}
-
-/* Learned lines recede so the eye lands on what is still left to study.
-   `active` uses the same green, so learned rows are marked with a tick and a
-   left rail rather than a fill, and the two states stay distinguishable when a
-   learned line is also the selected one. */
 .variation-btn.learned {
-    border-left: 2px solid var(--accent-cyan);
+    background: var(--status-learned-fill);
+    border-left-color: var(--status-learned);
+}
+
+.variation-btn.learned:hover {
+    background: var(--status-learned-fill-hover);
+}
+
+/* Selection reads as a ring rather than a fill, so it layers over either
+   status colour instead of replacing it. */
+.variation-btn.active {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 1px var(--accent-blue), 0 0 12px rgba(0, 180, 255, 0.25);
+    color: var(--text-primary);
 }
 
 .variation-btn.learned .variation-name {
@@ -611,10 +618,11 @@ const statusClass = computed(() => {
     color: var(--text-primary);
 }
 
+/* Tick as well as colour, so learned state isn't signalled by hue alone. */
 .variation-learned {
     font-size: 0.75rem;
     font-weight: 700;
-    color: var(--accent-cyan);
+    color: var(--status-learned);
     flex-shrink: 0;
 }
 
@@ -634,8 +642,8 @@ const statusClass = computed(() => {
 }
 
 .variation-btn.active .variation-index {
-    background: rgba(76, 175, 80, 0.2);
-    color: var(--accent-green);
+    background: rgba(0, 180, 255, 0.2);
+    color: var(--accent-blue);
 }
 
 .variation-name {
@@ -649,7 +657,7 @@ const statusClass = computed(() => {
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: var(--accent-green);
+    background: var(--accent-blue);
     flex-shrink: 0;
 }
 

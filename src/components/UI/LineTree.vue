@@ -304,9 +304,15 @@ const rows = computed((): DisplayRow[] => {
 
 .tree-row.is-leaf  { cursor: pointer; }
 .tree-row.is-trunk { cursor: pointer; }
-.tree-row.is-leaf:hover  { background: var(--bg-card-hover); }
 .tree-row.is-trunk:hover { background: rgba(70, 83, 98, 0.4); }
-.tree-row.is-active      { background: rgba(76, 175, 80, 0.12) !important; }
+
+/* Only leaves are actual lines, so only leaves carry a status fill — tinting
+   trunk rows would colour shared prefixes that are not learnable on their own.
+   Rose = still to learn, green = learned. */
+.tree-row.is-leaf                 { background: var(--status-unlearned-fill); }
+.tree-row.is-leaf:hover           { background: var(--status-unlearned-fill-hover); }
+.tree-row.is-leaf.is-learned      { background: var(--status-learned-fill); }
+.tree-row.is-leaf.is-learned:hover { background: var(--status-learned-fill-hover); }
 
 /* ── Gutter ──────────────────────────────────────────────────── */
 .tree-gutter {
@@ -492,22 +498,32 @@ const rows = computed((): DisplayRow[] => {
 .tree-row.is-leaf:hover .line-name { color: var(--text-primary); }
 
 .tree-row.is-active .line-name {
-  color: var(--accent-green) !important;
+  color: var(--text-primary) !important;
   font-weight: 600;
 }
 
-/* ── Learned lines ───────────────────────────────────────────── */
-/* `is-active` already owns green, so learned leaves are marked with a cyan tick
-   and a left rail. Both classes can apply at once (the selected line is often
-   one you have just learned), so these must not fight over the same property. */
-.tree-row.is-learned {
-  box-shadow: inset 2px 0 0 var(--accent-cyan);
+/* ── Learned / unlearned status ──────────────────────────────── */
+/* Status is carried by the row fill (above) plus a left rail; selection is a
+   separate ring, so a line can be both learned and selected without the two
+   colours competing for the same property. */
+.tree-row.is-leaf {
+  box-shadow: inset 3px 0 0 var(--status-unlearned);
 }
 
+.tree-row.is-leaf.is-learned {
+  box-shadow: inset 3px 0 0 var(--status-learned);
+}
+
+.tree-row.is-active {
+  outline: 1px solid var(--accent-blue);
+  outline-offset: -1px;
+}
+
+/* Tick as well as colour, so learned state isn't signalled by hue alone. */
 .line-learned {
   font-size: 0.72rem;
   font-weight: 700;
-  color: var(--accent-cyan);
+  color: var(--status-learned);
   margin-left: 4px;
   flex-shrink: 0;
 }
