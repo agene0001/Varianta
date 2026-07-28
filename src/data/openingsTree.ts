@@ -425,6 +425,25 @@ const ruyLopezTree: TreeMove[] = [
                             description: "Black attacked your bishop with a6. Retreat to a4 to maintain the pin on the diagonal.",
                             variations: [
                               {
+                                san: "d6",
+                                description: "Black plays the Modern Steinitz with d6, propping up e5 before developing. Played in 8% of games here.",
+                                lineName: "Modern Steinitz: Legall's Mate",
+                                lineDescription: "Set up with Nc3, and if Black pins with ...Bg4 the knight leap Nxe5! wins material — or mates outright when Black grabs the queen.",
+                                variations: line(
+                                  { san: "Nc3", description: "Black played d6. Develop Nc3. It isn't the main move here (5.O-O and 5.c3 are far more common) but it's just as good — about +0.4 either way — and it aims a piece at the d5 square, which turns out to matter." },
+                                  { san: "b5", description: "Black gains queenside space with b5, hitting your bishop." },
+                                  { san: "Bb3", description: "Black played b5. Retreat to b3, where the bishop keeps its aim at f7 — the square the whole trap runs through." },
+                                  { san: "Bg4", description: "Black pins your knight to the queen with Bg4. This is the mistake: Black's best was ...Be7. The pin only looks binding." },
+                                  { san: "h3", description: "Black pinned your f3 knight. Ask the question with h3 — the bishop must decide whether to take or hold the pin." },
+                                  { san: "Bh5", description: "Black keeps the pin with Bh5, the natural choice (78% play it). The bishop is now on the d1–h5 diagonal, and your knight is the only thing standing on it." },
+                                  { san: "Nxe5", description: "Black played Bh5. Now the point: Nxe5! Moving the knight uncovers your queen's attack on the h5 bishop, so this is NOT a real sacrifice. If Black declines with 8...Nxe5, you simply play 9.Qxh5 and win the piece straight back — still about +2.3. Black grabs the queen anyway more than half the time." },
+                                  { san: "Bxd1", description: "Black takes the queen — the greedy move, played 54% of the time from here." },
+                                  { san: "Bxf7+", description: "Black took your queen. Bxf7+! Check — and Black has exactly one legal reply." },
+                                  { san: "Ke7", description: "Black's king is forced to e7; every other square is covered." },
+                                  { san: "Nd5#", description: "Black played Ke7, the only move. Nd5 is checkmate! The knight covers the escape squares, your f7 bishop and e5 knight seal the rest, and Black's extra queen sits uselessly on d1. This is Legall's Mate — the reason Nc3 went to that square on move five." },
+                                ),
+                              },
+                              {
                                 san: "Nf6",
                                 description: "Black develops to f6 and attacks e4.",
                                 variations: [
