@@ -635,14 +635,32 @@ watch(currentLineIndex, () => {
 </script>
 
 <style scoped>
+/* App shell: exactly one viewport tall, nav on top, the active view filling the
+   rest. Previously .app was min-height:100vh and .game-screen was another full
+   100vh below the nav, so the page was always nav-height taller than the window
+   and the bottom toolbar sat below the fold. */
 .app {
-  min-height: 100vh;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
   color: var(--text-primary);
+}
+
+/* Views keep their natural height by default (Games/Settings scroll the page as
+   before); the two that should fill the shell opt in below. */
+.app > * {
+  flex-shrink: 0;
+}
+
+.section-nav {
+  flex-shrink: 0;
 }
 
 /* ── Home Screen ─────────────────────────────────────────── */
 .home-screen {
-  min-height: 100vh;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
 }
@@ -814,7 +832,8 @@ watch(currentLineIndex, () => {
 
 /* ── Game Screen ─────────────────────────────────────────── */
 .game-screen {
-  height: 100vh;
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -850,7 +869,10 @@ watch(currentLineIndex, () => {
 
 .board-column {
   flex: 0 0 auto;
-  height: min(calc(100vh - 120px), calc(100vw - 1.5rem));
+  /* Relative to the space actually available rather than a hardcoded
+     `100vh - 120px`, which did not know about the nav, progress bar or toolbar
+     and so could push the layout past the window. */
+  height: min(100%, calc(100vw - 1.5rem));
   aspect-ratio: 1 / 1;
   display: flex;
   align-items: center;
@@ -940,10 +962,22 @@ watch(currentLineIndex, () => {
 
 /* ── Responsive: stack vertically on narrow screens ──────── */
 @media (max-width: 700px) {
-  .game-screen {
+  /* Stacked layout scrolls as one page, so the shell grows with its content and
+     the toolbar sticks to the viewport instead of to a fixed-height shell. */
+  .app {
     height: auto;
     min-height: 100vh;
-    overflow-y: auto;
+  }
+
+  .game-screen {
+    flex: none;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .board-column {
+    height: auto;
   }
 
   .game-layout {
