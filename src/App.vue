@@ -479,7 +479,6 @@ const onUserMove = (move: any) => {
   if (!correct && gameMode.value === 'time' && timeLeft.value > 0) {
     timeLeft.value = Math.max(0, timeLeft.value - 5);
   }
-  if (correct && isLineComplete.value) saveMastery();
 };
 
 const switchMode = (newMode: 'learn' | 'practice' | 'drill' | 'time') => {
@@ -584,6 +583,11 @@ function saveBestTime(remaining: number) {
 // Mode-specific completion handling
 watch(isLineComplete, (complete) => {
   if (!complete) return;
+  // Mastery is recorded here rather than in onUserMove because the last move of
+  // a line is often the opponent's, and those are played by playNextComputerMove
+  // without ever firing a user-move event — so lines ending on Black's move were
+  // never marked learned. Watching completion itself catches every path.
+  saveMastery();
   if (gameMode.value === 'drill') {
     drillStreak.value += 1;
     drillCompleted.value += 1;
