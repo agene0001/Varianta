@@ -100,20 +100,28 @@ export function useChessGame() {
    * A sibling line that reaches this exact position and plays `san` next, or
    * null. The prefix must match move for move — a line that merely contains the
    * same move later on is a different position and must not be accepted.
+   *
+   * Several lines usually qualify (playing ...Nc6 into the Stafford matches all
+   * ten of its lines, which only diverge later). The longest is chosen: a short
+   * trunk line is a strict prefix of the deeper ones, so picking it would end
+   * the drill within a couple of moves, and any remaining divergence resolves
+   * itself at the next fork anyway.
    */
   const findLineContinuing = (san: string): Line | null => {
     const idx = currentMoveIndex.value;
     const current = selectedLine.value;
     if (!current) return null;
     const played = current.moves.slice(0, idx);
-    return (
-      lineOptions.value.find(
-        (line) =>
-          line !== current &&
-          line.moves.length > idx &&
-          line.moves[idx].san === san &&
-          played.every((step, i) => line.moves[i]?.san === step.san),
-      ) ?? null
+    const candidates = lineOptions.value.filter(
+      (line) =>
+        line !== current &&
+        line.moves.length > idx &&
+        line.moves[idx].san === san &&
+        played.every((step, i) => line.moves[i]?.san === step.san),
+    );
+    if (candidates.length === 0) return null;
+    return candidates.reduce((best, line) =>
+      line.moves.length > best.moves.length ? line : best,
     );
   };
 
