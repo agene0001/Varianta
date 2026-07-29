@@ -5,8 +5,11 @@
             <div class="header-top">
                 <span class="mode-badge">{{ modeBadgeLabel }}</span>
                 <span class="opening-name">{{ opening.name }}</span>
-                <span v-if="currentMode === 'drill'" class="line-name-header">{{ currentLineName }}</span>
-                <span v-else class="line-number">#{{ currentLineIndex + 1 }}</span>
+                <!-- Name in every mode, not just drill: several lines share a
+                     position and diverge on our move, so "#7" alone does not say
+                     which variation is being trained. -->
+                <span class="line-name-header">{{ currentLineName }}</span>
+                <span v-if="currentMode !== 'drill'" class="line-number">#{{ currentLineIndex + 1 }}</span>
             </div>
         </div>
 

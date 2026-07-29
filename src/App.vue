@@ -401,6 +401,7 @@ const {
   boardAPI,
   currentMoveIndex,
   selectedLine,
+  lineOptions,
   practiceStatus,
   mode: gameMode,
   isLineComplete,
@@ -629,8 +630,27 @@ const goHome = () => {
 };
 
 watch(currentLineIndex, () => {
+  // A mid-line variation switch syncs currentLineIndex to the line already being
+  // played; restarting it here would wipe the moves made so far.
+  if (currentLine.value && currentLine.value === selectedLine.value) return;
   if (currentLine.value && boardAPI.value) startLine(currentLine.value, userColor.value);
   if (gameMode.value === 'time') startTimer();
+});
+
+// Give the game the whole opening, so a move that follows a sibling line from
+// the current position is recognised instead of rejected.
+watch(
+  () => selectedOpening.value?.lines,
+  (lines) => { lineOptions.value = lines ?? []; },
+  { immediate: true },
+);
+
+// When the game switches variation mid-line, follow it so the tree highlight and
+// the line name in the header track what is actually being played.
+watch(selectedLine, (line) => {
+  if (!line || !selectedOpening.value) return;
+  const idx = selectedOpening.value.lines.indexOf(line);
+  if (idx !== -1 && idx !== currentLineIndex.value) currentLineIndex.value = idx;
 });
 </script>
 

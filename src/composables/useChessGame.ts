@@ -89,6 +89,34 @@ export function useChessGame() {
     }
   };
 
+  /**
+   * Every line in the opening being trained. Set by the caller so that a move
+   * which follows a different line from the current position can be recognised
+   * rather than marked wrong.
+   */
+  const lineOptions = ref<Line[]>([]);
+
+  /**
+   * A sibling line that reaches this exact position and plays `san` next, or
+   * null. The prefix must match move for move — a line that merely contains the
+   * same move later on is a different position and must not be accepted.
+   */
+  const findLineContinuing = (san: string): Line | null => {
+    const idx = currentMoveIndex.value;
+    const current = selectedLine.value;
+    if (!current) return null;
+    const played = current.moves.slice(0, idx);
+    return (
+      lineOptions.value.find(
+        (line) =>
+          line !== current &&
+          line.moves.length > idx &&
+          line.moves[idx].san === san &&
+          played.every((step, i) => line.moves[i]?.san === step.san),
+      ) ?? null
+    );
+  };
+
   const handleUserMove = (move: any): boolean => {
       if (isComputerMoving.value) return true;
       
@@ -115,12 +143,20 @@ export function useChessGame() {
       }
   
       const expectedStep = selectedLine.value.moves[currentMoveIndex.value];
-  
-      // Check if move matches expected SAN
-      if (move.san === expectedStep.san) {
+
+      // Several lines in an opening share a position and then diverge on *our*
+      // move — Najdorf vs Dragon, Tarrasch vs Advance, the Stafford Be3 trap vs
+      // its quiet treatment. Any of those moves is a legitimate thing to play,
+      // so if the move continues a sibling line rather than this one, switch to
+      // that line instead of rejecting it.
+      const alternative =
+        move.san === expectedStep.san ? null : findLineContinuing(move.san);
+      if (alternative) selectedLine.value = alternative;
+
+      if (move.san === expectedStep.san || alternative) {
         currentMoveIndex.value++;
-        practiceStatus.value = "Correct!";
-  
+        practiceStatus.value = alternative ? "Correct! (switched variation)" : "Correct!";
+
         if (currentMoveIndex.value >= selectedLine.value.moves.length) {
           practiceStatus.value = "Line complete!";
         } else {
@@ -186,6 +222,7 @@ export function useChessGame() {
     boardAPI,
     currentMoveIndex,
     selectedLine,
+    lineOptions,
     practiceStatus,
     mode,
     isLineComplete,
