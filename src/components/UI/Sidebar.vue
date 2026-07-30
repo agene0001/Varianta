@@ -21,7 +21,10 @@
                     {{ description }}
                 </p>
                 <p v-else-if="currentMode === 'practice' && !status" class="description-text">
-                    Play the correct move.
+                    Play the correct move — moves are hidden.
+                </p>
+                <p v-else-if="currentMode === 'review' && !status" class="description-text">
+                    Review — the lines you get wrong most come first.
                 </p>
                 <p v-else-if="currentMode === 'drill' && !status" class="description-text">
                     Drill mode — play the correct move. Lines auto-advance on completion.
@@ -33,12 +36,18 @@
                     {{ status }}
                 </p>
                 <button
-                    v-if="isLineComplete && (currentMode === 'learn' || currentMode === 'practice')"
+                    v-if="isLineComplete && (currentMode === 'learn' || currentMode === 'practice' || currentMode === 'review')"
                     class="continue-btn"
                     @click="$emit('continue')"
                 >
                     Continue
-                    <span class="continue-hint">{{ currentMode === 'learn' ? 'next line ↓' : 'random line ⤮' }}</span>
+                    <span class="continue-hint">{{
+                        currentMode === 'learn'
+                            ? 'next line ↓'
+                            : currentMode === 'review'
+                                ? 'weakest next ↻'
+                                : 'random line ⤮'
+                    }}</span>
                 </button>
             </div>
         </div>
@@ -64,6 +73,22 @@
                 <div class="mode-btn-text">
                     <span class="mode-btn-title">Practice</span>
                     <span class="mode-btn-subtitle">{{ linesPerfected }}/{{ totalLines }} lines perfected</span>
+                </div>
+            </button>
+
+            <button
+                :class="['mode-btn', 'mode-btn-full', { active: currentMode === 'review' }]"
+                @click="$emit('modeChanged', 'review')"
+            >
+                <span class="mode-btn-icon">&#8635;</span>
+                <div class="mode-btn-text">
+                    <span class="mode-btn-title">Review</span>
+                    <span class="mode-btn-subtitle">
+                        <template v-if="linesNeedingReview">
+                            {{ linesNeedingReview }} line{{ linesNeedingReview === 1 ? '' : 's' }} need work
+                        </template>
+                        <template v-else>Weakest lines first</template>
+                    </span>
                 </div>
             </button>
 
@@ -140,20 +165,25 @@
             <Transition name="slide-down">
                 <div v-if="variationsOpen" class="variations-body">
 
-                    <!-- Single view toggle -->
-                    <div class="view-toggle">
+                    <!-- Single view toggle. Hidden when the moves must stay
+                         hidden: the tree spells out every move, so offering it
+                         during a from-memory mode is just an answer key. -->
+                    <div v-if="!hideMoves" class="view-toggle">
                         <button class="view-pill" @click.stop="viewMode = viewMode === 'tree' ? 'list' : 'tree'">
                             <span>{{ viewMode === 'tree' ? '≡' : '⑂' }}</span>
                             {{ viewMode === 'tree' ? 'List view' : 'Tree view' }}
                         </button>
                     </div>
+                    <p v-else class="moves-hidden-note">
+                        Moves hidden — pick a line by name
+                    </p>
 
                     <!-- Scrollable content -->
                     <div class="variations-panel">
 
                         <!-- Tree view -->
                         <LineTree
-                            v-if="viewMode === 'tree'"
+                            v-if="viewMode === 'tree' && !hideMoves"
                             :lines="opening.lines"
                             :current-line-index="currentLineIndex"
                             :played-moves="playedMoves"
@@ -175,6 +205,13 @@
                             >
                                 <span class="variation-index">{{ index + 1 }}</span>
                                 <span class="variation-name">{{ line.name }}</span>
+                                <!-- Recalled from memory, which is a stronger
+                                     claim than having read through it once. -->
+                                <span
+                                    v-if="practicedLines?.has(line.name)"
+                                    class="variation-practiced"
+                                    title="Practiced from memory"
+                                >&#9679;</span>
                                 <span
                                     v-if="learnedLines?.has(line.name)"
                                     class="variation-learned"
@@ -199,11 +236,15 @@ import LineTree from "./LineTree.vue";
 interface Props {
     opening: Opening;
     currentLineIndex: number;
-    currentMode: "learn" | "practice" | "drill" | "time";
+    currentMode: "learn" | "practice" | "drill" | "time" | "review";
     linesDiscovered: number;
     linesPerfected: number;
     /** Names of lines already learned, for the learned/unlearned styling. */
     learnedLines?: Set<string>;
+    /** Names of lines completed from memory in Practice or Review. */
+    practicedLines?: Set<string>;
+    /** Lines with a mistake against them, or never practiced. */
+    linesNeedingReview?: number;
     status: string;
     description: string;
     playedMoves?: string[];
@@ -218,7 +259,7 @@ interface Props {
 const props = defineProps<Props>();
 
 defineEmits<{
-    (e: "modeChanged", mode: "learn" | "practice" | "drill" | "time"): void;
+    (e: "modeChanged", mode: "learn" | "practice" | "drill" | "time" | "review"): void;
     (e: "lineChanged", index: number): void;
     (e: "continue"): void;
 }>();
@@ -236,10 +277,20 @@ const modeBadgeLabel = computed(() => {
     switch (props.currentMode) {
         case "learn": return "Learn";
         case "practice": return "Practice";
+        case "review": return "Review";
         case "drill": return "Drill";
         case "time": return "Time";
     }
 });
+
+/**
+ * Modes that test recall must not show the moves. The tree view spells out every
+ * move of every line, so leaving it available during Practice or Review is just
+ * an answer key. The list shows names only, which is enough to navigate.
+ */
+const hideMoves = computed(
+    () => props.currentMode === "practice" || props.currentMode === "review",
+);
 
 const statusClass = computed(() => {
     if (props.status.includes("Correct") || props.status.includes("complete"))
@@ -654,6 +705,22 @@ const statusClass = computed(() => {
     font-size: 0.75rem;
     font-weight: 700;
     color: var(--status-learned);
+    flex-shrink: 0;
+}
+
+/* Recalled from memory — a stronger claim than the learned tick. */
+.variation-practiced {
+    font-size: 0.6rem;
+    color: var(--accent-green);
+    flex-shrink: 0;
+}
+
+.moves-hidden-note {
+    margin: 0;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border-color);
     flex-shrink: 0;
 }
 

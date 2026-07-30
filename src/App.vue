@@ -113,6 +113,8 @@
             :lines-discovered="linesDiscovered"
             :lines-perfected="linesPerfected"
             :learned-lines="learnedLineNames"
+            :practiced-lines="practicedLineNames"
+            :lines-needing-review="linesNeedingReview"
             :status="practiceStatus"
             :description="currentDescription"
             :played-moves="playedMoves"
@@ -205,8 +207,33 @@ const emptyStored = { linesByOpening: {} as Record<string, Line[]>, newOpenings:
 interface LineProgress {
   lineId?: string;
   openingId?: string;
+  /**
+   * Legacy flag, written by every mode before learn and practice were tracked
+   * separately. Read as "learned" so existing progress isn't lost.
+   */
   mastered: boolean;
+  /** Walked through the line in Learn, where the moves are shown. */
+  learned?: boolean;
+  /** Completed the line from memory in Practice or Review. */
+  practiced?: boolean;
+  /** Number of Practice/Review attempts. */
+  attempts?: number;
+  /** Wrong moves in the most recent attempt — drives review ordering. */
+  recentMistakes?: number;
+  /** Wrong moves across every attempt. */
+  totalMistakes?: number;
+  /** Epoch ms of the last Practice/Review attempt; breaks ties in review order. */
+  lastPracticed?: number;
 }
+
+/** Learn credit. Legacy entries only carry `mastered`, which meant exactly this. */
+const isLearned = (p?: LineProgress) => !!p && (p.learned || p.mastered);
+/**
+ * Practice credit — deliberately *not* implied by `mastered`. Old entries were
+ * written by any mode, so treating them as practiced would credit lines the user
+ * has only ever read the answers to.
+ */
+const isPracticed = (p?: LineProgress) => !!p?.practiced;
 
 /**
  * Reactive mirror of the `progress-*` entries in localStorage, keyed by
@@ -444,20 +471,56 @@ const learnedLineNames = computed<Set<string>>(() => {
   const openingId = selectedOpening.value.id;
   return new Set(
     selectedOpening.value.lines
-      .filter(line => progress.value[progressKey(openingId, line.name)]?.mastered)
+      .filter(line => isLearned(progress.value[progressKey(openingId, line.name)]))
       .map(line => line.name),
   );
 });
 
-const linesDiscovered = computed(() => {
-  if (!selectedOpening.value) return 0;
+const practicedLineNames = computed<Set<string>>(() => {
+  if (!selectedOpening.value) return new Set();
   const openingId = selectedOpening.value.id;
-  return selectedOpening.value.lines.filter(
-    line => progress.value[progressKey(openingId, line.name)] !== undefined,
-  ).length;
+  return new Set(
+    selectedOpening.value.lines
+      .filter(line => isPracticed(progress.value[progressKey(openingId, line.name)]))
+      .map(line => line.name),
+  );
 });
 
-const linesPerfected = computed(() => learnedLineNames.value.size);
+const linesDiscovered = computed(() => learnedLineNames.value.size);
+const linesPerfected = computed(() => practicedLineNames.value.size);
+
+/**
+ * Lines ordered for review: the ones most recently got wrong come first, then
+ * fewer mistakes, then clean ones, with never-practiced lines ahead of anything
+ * already answered correctly. Ties go to whatever was practiced longest ago, so
+ * a session works through the whole set rather than looping on one line.
+ */
+const reviewOrder = computed<number[]>(() => {
+  if (!selectedOpening.value) return [];
+  const openingId = selectedOpening.value.id;
+  return selectedOpening.value.lines
+    .map((line, index) => {
+      const p = progress.value[progressKey(openingId, line.name)];
+      return {
+        index,
+        // Never practiced sorts just above a clean line but below any mistake.
+        mistakes: p?.recentMistakes ?? (isPracticed(p) ? 0 : 0.5),
+        lastPracticed: p?.lastPracticed ?? 0,
+      };
+    })
+    .sort((a, b) => b.mistakes - a.mistakes || a.lastPracticed - b.lastPracticed)
+    .map(entry => entry.index);
+});
+
+/** How many lines in this opening still have a mistake against them. */
+const linesNeedingReview = computed(() => {
+  if (!selectedOpening.value) return 0;
+  const openingId = selectedOpening.value.id;
+  return selectedOpening.value.lines.filter(line => {
+    const p = progress.value[progressKey(openingId, line.name)];
+    return (p?.recentMistakes ?? 0) > 0 || !isPracticed(p);
+  }).length;
+});
 
 const selectOpening = (opening: Opening) => {
   selectedOpening.value = opening;
@@ -468,12 +531,17 @@ const selectOpening = (opening: Opening) => {
 const onBoardCreated = (api: any) => {
   setBoardAPI(api);
   nextTick(() => {
-    if (currentLine.value) startLine(currentLine.value, userColor.value);
+    if (currentLine.value) beginLine(currentLine.value);
   });
 };
 
 const onUserMove = (move: any) => {
   const correct = handleUserMove(move);
+  if (!correct) {
+    // Counted for every mode but only stored on from-memory attempts, so review
+    // priority reflects recall rather than fumbling around in Learn.
+    attemptMistakes.value += 1;
+  }
   if (!correct && gameMode.value === 'drill') {
     drillStreak.value = 0;
   }
@@ -482,18 +550,33 @@ const onUserMove = (move: any) => {
   }
 };
 
-const switchMode = (newMode: 'learn' | 'practice' | 'drill' | 'time') => {
+/**
+ * Start a line and reset per-attempt bookkeeping. Wrapping startLine keeps the
+ * mistake count tied to exactly one attempt — every entry point into a line goes
+ * through here, so it can't drift.
+ */
+const beginLine = (line: Line) => {
+  attemptMistakes.value = 0;
+  startLine(line, userColor.value);
+};
+
+const switchMode = (newMode: 'learn' | 'practice' | 'drill' | 'time' | 'review') => {
   stopTimer();
   gameMode.value = newMode;
   if (newMode === 'drill') {
     currentLineIndex.value = pickRandomLineIndex();
   }
-  if (currentLine.value) startLine(currentLine.value, userColor.value);
+  // Review always opens on whatever you're weakest at, rather than wherever you
+  // happened to be.
+  if (newMode === 'review' && reviewOrder.value.length) {
+    currentLineIndex.value = reviewOrder.value[0];
+  }
+  if (currentLine.value) beginLine(currentLine.value);
   if (newMode === 'time') startTimer();
 };
 
 const toggleMode = () => {
-  const cycle: Array<'learn' | 'practice' | 'drill' | 'time'> = ['learn', 'practice', 'drill', 'time'];
+  const cycle: Array<'learn' | 'practice' | 'drill' | 'time' | 'review'> = ['learn', 'practice', 'review', 'drill', 'time'];
   const next = cycle[(cycle.indexOf(gameMode.value) + 1) % cycle.length];
   switchMode(next);
 };
@@ -501,7 +584,7 @@ const toggleMode = () => {
 const switchLine = (index: number) => {
   // Re-clicking the current line should restart it, not no-op.
   if (index === currentLineIndex.value && currentLine.value && boardAPI.value) {
-    startLine(currentLine.value, userColor.value);
+    beginLine(currentLine.value);
     if (gameMode.value === 'time') startTimer();
   } else {
     currentLineIndex.value = index;
@@ -517,13 +600,26 @@ const continueToNextLine = () => {
   const nextIndex =
     gameMode.value === 'practice'
       ? pickRandomLineIndex()
-      : (currentLineIndex.value + 1) % count;
+      : gameMode.value === 'review'
+        ? nextReviewLineIndex()
+        : (currentLineIndex.value + 1) % count;
   if (nextIndex === currentLineIndex.value) {
     // Same line (e.g. only one exists) — restart it, since the watcher won't fire.
-    if (currentLine.value) startLine(currentLine.value, userColor.value);
+    if (currentLine.value) beginLine(currentLine.value);
   } else {
     currentLineIndex.value = nextIndex;
   }
+};
+
+/**
+ * Next line to review: the highest-priority one that isn't the line just
+ * finished, so a single weak line doesn't repeat back to back. Falls back to
+ * repeating it when it's the only line there is.
+ */
+const nextReviewLineIndex = (): number => {
+  const order = reviewOrder.value;
+  if (!order.length) return currentLineIndex.value;
+  return order.find(i => i !== currentLineIndex.value) ?? order[0];
 };
 
 // ─── Drill mode ──────────────────────────────────────────
@@ -606,16 +702,38 @@ const onHint = () => showHint();
 
 const onStepBack = () => stepBack();
 
+/**
+ * Wrong moves in the current attempt. Reset whenever a line starts, so it always
+ * describes the attempt just finished rather than accumulating across lines.
+ */
+const attemptMistakes = ref(0);
+
+/**
+ * Record completing the current line.
+ *
+ * Learn and Practice credit are separate: Learn shows you the moves, so finishing
+ * a line there says nothing about whether you can recall it. Only Practice and
+ * Review — where the moves are hidden — count as practice, and they also record
+ * how many mistakes it took, which is what review ordering runs on.
+ */
 const saveMastery = () => {
   if (!selectedOpening.value || !selectedLine.value) return;
   const key = progressKey(selectedOpening.value.id, selectedLine.value.name);
-  // Already learned — nothing to record. Completing a line a second time should
-  // not rewrite the entry or disturb the counters.
-  if (progress.value[key]?.mastered) return;
+  const prev = progress.value[key];
+  const fromMemory = gameMode.value === 'practice' || gameMode.value === 'review';
+
   const entry: LineProgress = {
     lineId: selectedLine.value.name,
     openingId: selectedOpening.value.id,
     mastered: true,
+    learned: prev?.learned || prev?.mastered || gameMode.value === 'learn',
+    practiced: prev?.practiced || fromMemory,
+    attempts: (prev?.attempts ?? 0) + (fromMemory ? 1 : 0),
+    // Keep the previous attempt's count when this wasn't a from-memory attempt,
+    // so walking a line in Learn doesn't wipe its review priority.
+    recentMistakes: fromMemory ? attemptMistakes.value : prev?.recentMistakes,
+    totalMistakes: (prev?.totalMistakes ?? 0) + (fromMemory ? attemptMistakes.value : 0),
+    lastPracticed: fromMemory ? Date.now() : prev?.lastPracticed,
   };
   localStorage.setItem(key, JSON.stringify(entry));
   progress.value[key] = entry;
@@ -633,7 +751,7 @@ watch(currentLineIndex, () => {
   // A mid-line variation switch syncs currentLineIndex to the line already being
   // played; restarting it here would wipe the moves made so far.
   if (currentLine.value && currentLine.value === selectedLine.value) return;
-  if (currentLine.value && boardAPI.value) startLine(currentLine.value, userColor.value);
+  if (currentLine.value && boardAPI.value) beginLine(currentLine.value);
   if (gameMode.value === 'time') startTimer();
 });
 

@@ -1,3 +1,5 @@
+import { Chess } from "chess.js";
+
 export interface LichessOpening {
   e: string;
   n: string;
@@ -74,7 +76,6 @@ export async function loadBookPositions(): Promise<Set<string>> {
   if (bookPositions) return bookPositions;
   if (bookPositionsPromise) return bookPositionsPromise;
   bookPositionsPromise = (async () => {
-    const { Chess } = await import("chess.js");
     const openings = await loadRawOpenings();
 
     type Node = Map<string, Node>;

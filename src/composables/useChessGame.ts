@@ -8,7 +8,7 @@ export function useChessGame() {
   const currentMoveIndex = ref(0);
   const selectedLine = ref<Line | null>(null);
   const practiceStatus = ref("");
-  const mode = ref<"learn" | "practice" | "drill" | "time">("learn");
+  const mode = ref<"learn" | "practice" | "drill" | "time" | "review">("learn");
   
   const userColor = ref<"white" | "black">("white");
   
