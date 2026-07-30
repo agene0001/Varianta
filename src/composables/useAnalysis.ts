@@ -11,8 +11,17 @@ export type Severity =
   | "excellent"
   | "good"
   | "inaccuracy"
+  | "miss"
   | "mistake"
   | "blunder";
+
+/**
+ * Severities that represent a real error — the ones worth explaining, showing a
+ * recommended line for, and drilling as puzzles. A `miss` is a thrown-away win,
+ * so it belongs here alongside mistakes and blunders.
+ */
+export const isError = (severity: Severity): boolean =>
+  severity === "miss" || severity === "mistake" || severity === "blunder";
 export type Score = { kind: "cp"; value: number } | { kind: "mate"; value: number };
 
 /** Tactical themes a mistake can be tagged with (mirrors `gambit_engine::Concept`). */

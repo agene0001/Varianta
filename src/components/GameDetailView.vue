@@ -13,8 +13,10 @@ import {
   whiteBarPct,
   CONCEPT_LABELS,
   CONCEPT_ICONS,
+  isError,
   type MoveAnalysis,
 } from '../composables/useAnalysis';
+import { loadLichessOpenings } from '../services/lichessOpenings';
 
 const props = defineProps<{ game: Game }>();
 const emit = defineEmits<{ (e: 'back'): void }>();
@@ -31,7 +33,7 @@ const puzzleMode = ref(false);
 const trainableCount = computed(
   () =>
     analyses.value?.filter(
-      (a) => (a.severity === 'mistake' || a.severity === 'blunder') && a.best_line?.length,
+      (a) => isError(a.severity) && a.best_line?.length,
     ).length ?? 0,
 );
 
@@ -91,7 +93,7 @@ function nextMistake() {
   if (!list?.length) return;
   for (let off = 1; off <= list.length; off++) {
     const i = (selected.value + off + list.length) % list.length;
-    if (list[i].severity === 'mistake' || list[i].severity === 'blunder') {
+    if (isError(list[i].severity)) {
       selected.value = i;
       return;
     }
@@ -130,7 +132,7 @@ const boardView = computed(() => {
   const c = current.value;
   if (!c) return { fen: START_FEN, shapes: [] as Array<Record<string, string>> };
   const fen = c.fen_after || c.fen;
-  if (c.severity === 'mistake' || c.severity === 'blunder') {
+  if (isError(c.severity)) {
     const [bo, bd] = squares(c.best_uci);
     const [po, pd] = squares(c.played_uci);
     return {
@@ -152,7 +154,7 @@ const previewIndex = ref<number | null>(null);
 const pvLine = computed(() => {
   const c = current.value;
   if (!c?.best_line?.length) return [];
-  if (c.severity !== 'mistake' && c.severity !== 'blunder') return [];
+  if (!isError(c.severity)) return [];
   const chess = new Chess(c.fen);
   const steps: { san: string; fen: string; prefix: string; orig: string; dest: string }[] = [];
   for (let i = 0; i < c.best_line.length; i++) {
@@ -216,7 +218,7 @@ const showLineHint = computed(() => {
   const c = current.value;
   return (
     !!c &&
-    (c.severity === 'mistake' || c.severity === 'blunder') &&
+    isError(c.severity) &&
     !c.best_line?.length
   );
 });
@@ -291,7 +293,9 @@ const evalText = computed(() => (current.value ? evalLabel(current.value) : '0.0
 const annotation: Record<string, string> = {
   brilliant: '!!',
   great: '!',
+  book: '⌸',
   inaccuracy: '?!',
+  miss: '?',
   mistake: '?',
   blunder: '??',
 };
@@ -303,7 +307,9 @@ const severityLabel: Record<string, string> = {
   best: "Best — the engine's first choice",
   excellent: 'Excellent — gives up almost nothing',
   good: 'Good',
+  book: 'Book — still in opening theory',
   inaccuracy: 'Inaccuracy',
+  miss: 'Miss — a winning position thrown away',
   mistake: 'Mistake',
   blunder: 'Blunder',
 };
@@ -322,6 +328,39 @@ interface MoveRow {
   black?: MoveAnalysis;
   blackIdx?: number;
 }
+
+/**
+ * Number of opening plies that are still theory, from the shipped Lichess
+ * opening database.
+ *
+ * Done here rather than in the engine on purpose: the database is already loaded
+ * and cached on this side, it would add ~800KB to the Rust binary for data the
+ * app already ships, and — the real win — labelling is applied at display time,
+ * so games analysed before this existed get their book moves marked without
+ * being re-analysed.
+ */
+const bookPlies = ref(0);
+
+watch(
+  analyses,
+  async (list) => {
+    bookPlies.value = 0;
+    if (!list?.length) return;
+    const played = list.map((m) => m.san);
+    const openings = await loadLichessOpenings();
+    let longest = 0;
+    for (const o of openings) {
+      if (o.m.length <= longest || o.m.length > played.length) continue;
+      if (o.m.every((san, i) => san === played[i])) longest = o.m.length;
+    }
+    bookPlies.value = longest;
+  },
+  { immediate: true },
+);
+
+/** Book moves are theory, so no quality judgement applies to them. */
+const displaySeverity = (m: MoveAnalysis, idx: number): string =>
+  idx < bookPlies.value ? 'book' : m.severity;
 
 // Group the flat ply list into (number, white, black) rows for a standard move list.
 const movePairs = computed<MoveRow[]>(() => {
@@ -398,7 +437,7 @@ const movePairs = computed<MoveRow[]>(() => {
         <!-- Best-move note under the board (so it's always visible, not buried below
              the scrolling move list). Only shown when the played move wasn't best. -->
         <div
-          v-if="current && (current.severity === 'mistake' || current.severity === 'blunder')"
+          v-if="current && isError(current.severity)"
           class="best-move"
         >
           Best was <code>{{ bestSan(current) }}</code>
@@ -449,14 +488,19 @@ const movePairs = computed<MoveRow[]>(() => {
               <span
                 v-if="row.white"
                 class="ply"
-                :class="[row.white.severity, { selected: selected === row.whiteIdx }]"
-                :title="severityLabel[row.white.severity]"
+                :class="[
+                  displaySeverity(row.white, row.whiteIdx!),
+                  { selected: selected === row.whiteIdx },
+                ]"
+                :title="severityLabel[displaySeverity(row.white, row.whiteIdx!)]"
                 @click="selected = row.whiteIdx!"
               >
                 {{ row.white.san
-                }}<span v-if="annotation[row.white.severity]" class="annot">{{
-                  annotation[row.white.severity]
-                }}</span><span
+                }}<span
+                  v-if="annotation[displaySeverity(row.white, row.whiteIdx!)]"
+                  class="annot"
+                  >{{ annotation[displaySeverity(row.white, row.whiteIdx!)] }}</span
+                ><span
                   v-for="c in row.white.concepts"
                   :key="c"
                   class="concept-mark"
@@ -467,14 +511,19 @@ const movePairs = computed<MoveRow[]>(() => {
               <span
                 v-if="row.black"
                 class="ply"
-                :class="[row.black.severity, { selected: selected === row.blackIdx }]"
-                :title="severityLabel[row.black.severity]"
+                :class="[
+                  displaySeverity(row.black, row.blackIdx!),
+                  { selected: selected === row.blackIdx },
+                ]"
+                :title="severityLabel[displaySeverity(row.black, row.blackIdx!)]"
                 @click="selected = row.blackIdx!"
               >
                 {{ row.black.san
-                }}<span v-if="annotation[row.black.severity]" class="annot">{{
-                  annotation[row.black.severity]
-                }}</span><span
+                }}<span
+                  v-if="annotation[displaySeverity(row.black, row.blackIdx!)]"
+                  class="annot"
+                  >{{ annotation[displaySeverity(row.black, row.blackIdx!)] }}</span
+                ><span
                   v-for="c in row.black.concepts"
                   :key="c"
                   class="concept-mark"
@@ -732,8 +781,23 @@ const movePairs = computed<MoveRow[]>(() => {
   color: #4d9fff;
 }
 
+/* Book moves are theory, not judgement — muted so they recede. */
+.ply.book .annot {
+  color: var(--text-secondary);
+}
+
+.ply.book {
+  color: var(--text-secondary);
+}
+
 .ply.inaccuracy .annot {
   color: #e0c200;
+}
+
+/* A thrown-away win sits between mistake and blunder in cost, and gets its own
+   colour so it's distinguishable at a glance. */
+.ply.miss .annot {
+  color: #ff7a7a;
 }
 
 .ply.mistake .annot {

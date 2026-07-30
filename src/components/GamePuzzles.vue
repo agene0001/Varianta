@@ -9,6 +9,7 @@ import {
   fetchLichessPuzzle,
   type Concept,
   type MoveAnalysis,
+  isError,
 } from '../composables/useAnalysis';
 import { opponent, type Game } from '../composables/useGames';
 
@@ -31,7 +32,7 @@ type Pz = {
 // ── Source A: this game's mistakes ─────────────────────────────
 const gamePuzzles = computed<Pz[]>(() =>
   props.analyses
-    .filter((a) => (a.severity === 'mistake' || a.severity === 'blunder') && a.best_line?.length)
+    .filter((a) => isError(a.severity) && a.best_line?.length)
     .map((a) => ({
       fen: a.fen,
       best_line: a.best_line,

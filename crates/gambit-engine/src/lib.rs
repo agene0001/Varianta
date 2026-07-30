@@ -371,6 +371,9 @@ pub enum Severity {
     Excellent,
     Good,
     Inaccuracy,
+    /// Threw away a winning position — a mistake, but a distinct lesson from
+    /// simply making a level position worse.
+    Miss,
     Mistake,
     Blunder,
 }
@@ -452,6 +455,10 @@ pub struct MoveContext {
     pub material_delta: Option<i32>,
     /// Position is still comfortable for the mover after the move.
     pub still_sound: bool,
+    /// Mover's win chance with best play available, before the move.
+    pub win_chance_before: f64,
+    /// Mover's win chance after the move actually played.
+    pub win_chance_after: f64,
 }
 
 /// A move counts as "only move" territory when every alternative is materially
@@ -460,6 +467,10 @@ const ONLY_MOVE_GAP: f64 = 10.0;
 /// Giving up at least this much material (a knight for a pawn, say) is a
 /// sacrifice rather than an exchange or a pawn grab.
 const SACRIFICE_CP: i32 = 150;
+/// Above this win chance the position was there to be won.
+const WINNING: f64 = 75.0;
+/// Below this it no longer is.
+const NOT_WINNING: f64 = 60.0;
 
 fn classify(ctx: &MoveContext) -> Severity {
     if ctx.played_is_best {
@@ -472,6 +483,15 @@ fn classify(ctx: &MoveContext) -> Severity {
             return Severity::Great;
         }
         return Severity::Best;
+    }
+    // Letting a win slip is worth calling out separately from an ordinary error:
+    // the position was winning, best play would have kept it that way, and the
+    // move played gave it up. Same magnitude of mistake, but a different lesson.
+    if ctx.win_chance_loss >= 10.0
+        && ctx.win_chance_before >= WINNING
+        && ctx.win_chance_after < NOT_WINNING
+    {
+        return Severity::Miss;
     }
     match ctx.win_chance_loss {
         l if l >= 20.0 => Severity::Blunder,
@@ -607,10 +627,12 @@ impl UciEngine {
                 _ => None,
             };
 
+            let wc_before = win_chance(score_cp(before.score));
+            let wc_after = win_chance(score_cp(eval_after));
             let ctx = MoveContext {
-                win_chance_loss: (win_chance(score_cp(before.score))
-                    - win_chance(score_cp(eval_after)))
-                .max(0.0),
+                win_chance_loss: (wc_before - wc_after).max(0.0),
+                win_chance_before: wc_before,
+                win_chance_after: wc_after,
                 played_is_best,
                 best_to_second: seconds[i].map(|second| {
                     (win_chance(score_cp(before.score)) - win_chance(score_cp(second))).max(0.0)
@@ -621,7 +643,12 @@ impl UciEngine {
                 still_sound: score_cp(eval_after) > -200,
             };
             let severity = classify(&ctx);
-            let is_error = matches!(severity, Severity::Mistake | Severity::Blunder);
+            // A Miss is a thrown-away win, so it needs the same "here's what you
+            // should have played" treatment as a mistake or blunder.
+            let is_error = matches!(
+                severity,
+                Severity::Miss | Severity::Mistake | Severity::Blunder
+            );
             // Classify the *why* — and keep the recommended line — only when the
             // move actually went wrong.
             let move_concepts = if is_error {
@@ -665,7 +692,7 @@ impl UciEngine {
 mod tests {
     use super::*;
 
-    /// Baseline context: best move played, nothing special about it.
+    /// Baseline context: best move played from a level position.
     fn ctx() -> MoveContext {
         MoveContext {
             win_chance_loss: 0.0,
@@ -673,7 +700,53 @@ mod tests {
             best_to_second: None,
             material_delta: None,
             still_sound: true,
+            win_chance_before: 50.0,
+            win_chance_after: 50.0,
         }
+    }
+
+    #[test]
+    fn throwing_away_a_win_is_a_miss_not_a_mistake() {
+        // Winning, best play keeps it, played move gives it up.
+        let missed = MoveContext {
+            win_chance_loss: 30.0,
+            played_is_best: false,
+            win_chance_before: 85.0,
+            win_chance_after: 55.0,
+            ..ctx()
+        };
+        assert_eq!(classify(&missed), Severity::Miss);
+
+        // The same size of error from a level position is an ordinary blunder —
+        // there was no win to miss.
+        let from_level = MoveContext {
+            win_chance_loss: 30.0,
+            played_is_best: false,
+            win_chance_before: 50.0,
+            win_chance_after: 20.0,
+            ..ctx()
+        };
+        assert_eq!(classify(&from_level), Severity::Blunder);
+
+        // Still winning afterwards: sloppy, not a miss.
+        let still_winning = MoveContext {
+            win_chance_loss: 12.0,
+            played_is_best: false,
+            win_chance_before: 92.0,
+            win_chance_after: 80.0,
+            ..ctx()
+        };
+        assert_eq!(classify(&still_winning), Severity::Mistake);
+
+        // Small slip from a winning position stays an inaccuracy.
+        let slip = MoveContext {
+            win_chance_loss: 6.0,
+            played_is_best: false,
+            win_chance_before: 85.0,
+            win_chance_after: 79.0,
+            ..ctx()
+        };
+        assert_eq!(classify(&slip), Severity::Inaccuracy);
     }
 
     #[test]
