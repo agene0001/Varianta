@@ -29,6 +29,15 @@ pub struct EngineEval {
     pub score: Score,
     /// Principal variation in UCI moves; `pv[0]` is the best move.
     pub pv: Vec<String>,
+    /// Which ranked line this is when the engine runs with `MultiPV > 1`: 1 is
+    /// the best move, 2 the second best, and so on. Defaults to 1, which is what
+    /// a single-line search reports (explicitly or by omission).
+    #[serde(default = "one")]
+    pub multipv: u32,
+}
+
+fn one() -> u32 {
+    1
 }
 
 impl EngineEval {
@@ -51,12 +60,17 @@ pub fn parse_info(line: &str) -> Option<EngineEval> {
     let mut depth: Option<u32> = None;
     let mut score: Option<Score> = None;
     let mut pv: Vec<String> = Vec::new();
+    let mut multipv: u32 = 1;
 
     let mut i = 1;
     while i < toks.len() {
         match toks[i] {
             "depth" => {
                 depth = toks.get(i + 1).and_then(|s| s.parse().ok());
+                i += 2;
+            }
+            "multipv" => {
+                multipv = toks.get(i + 1).and_then(|s| s.parse().ok()).unwrap_or(1);
                 i += 2;
             }
             "score" => match toks.get(i + 1) {
@@ -83,6 +97,7 @@ pub fn parse_info(line: &str) -> Option<EngineEval> {
         depth: depth?,
         score: score?,
         pv,
+        multipv,
     })
 }
 
@@ -259,6 +274,49 @@ impl UciEngine {
     }
 
     /// Analyze `fen` to a fixed `depth`, returning the deepest evaluation.
+    /// Analyze `fen` returning the top `lines` ranked continuations, best first.
+    ///
+    /// Two lines are what move classification needs: the gap between the best and
+    /// second-best move is what separates "the only move that worked" from "one of
+    /// several fine options", which is the difference between a great move and an
+    /// ordinary one.
+    pub fn analyze_position_multi(
+        &mut self,
+        fen: &str,
+        depth: u32,
+        lines: u32,
+    ) -> Result<Vec<EngineEval>, EngineError> {
+        let lines = lines.max(1);
+        self.send(&format!("setoption name MultiPV value {lines}"))?;
+        self.send(&format!("position fen {fen}"))?;
+        self.send(&format!("go depth {depth}"))?;
+
+        // Keep the deepest line seen per multipv rank; deeper supersedes shallower.
+        let mut best: std::collections::BTreeMap<u32, EngineEval> = Default::default();
+        let mut line = String::new();
+        loop {
+            line.clear();
+            if self.stdout.read_line(&mut line)? == 0 {
+                return Err(EngineError::Eof);
+            }
+            let l = line.trim_end();
+            if let Some(eval) = parse_info(l) {
+                best.insert(eval.multipv, eval);
+            } else if let Some(bm) = parse_bestmove(l) {
+                let mut out: Vec<EngineEval> = best.into_values().collect();
+                if out.is_empty() {
+                    return Err(EngineError::NoEval);
+                }
+                if out[0].pv.is_empty() && bm != "(none)" {
+                    out[0].pv.push(bm);
+                }
+                // Restore single-line searching for callers that don't want MultiPV.
+                self.send("setoption name MultiPV value 1")?;
+                return Ok(out);
+            }
+        }
+    }
+
     pub fn analyze_position(&mut self, fen: &str, depth: u32) -> Result<EngineEval, EngineError> {
         self.send(&format!("position fen {fen}"))?;
         self.send(&format!("go depth {depth}"))?;
@@ -294,15 +352,134 @@ impl Drop for UciEngine {
 
 // ============================== Game analysis ==============================
 
-/// Severity of a move relative to the engine's best, by centipawn loss.
+/// Quality of a move relative to the engine's best.
+///
+/// Graded on **win-chance loss** rather than raw centipawns: 100cp thrown away
+/// in a dead-equal position changes the result far more than 100cp given up when
+/// already three pawns up, and centipawn thresholds can't tell those apart.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Severity {
+    /// Best move, it was essentially the only one that worked, and it gives up
+    /// material to do it.
+    Brilliant,
+    /// Best move and essentially the only one that held the position together.
+    Great,
+    /// The engine's first choice.
     Best,
+    /// Not the engine's choice, but gives up almost nothing.
+    Excellent,
     Good,
     Inaccuracy,
     Mistake,
     Blunder,
+}
+
+/// Probability of winning from `cp`, as a percentage, from the point of view of
+/// the side to move. The logistic fit Lichess uses for its accuracy metric.
+fn win_chance(cp: i32) -> f64 {
+    let cp = cp.clamp(-100_000, 100_000) as f64;
+    50.0 + 50.0 * (2.0 / (1.0 + (-0.003_682_08 * cp).exp()) - 1.0)
+}
+
+/// Material on the board in centipawn-equivalents, white minus black. Kings are
+/// ignored; they're never captured.
+fn board_material(pos: &shakmaty::Chess) -> i32 {
+    use shakmaty::{Position, Role};
+    let value = |r: Role| match r {
+        Role::Pawn => 100,
+        Role::Knight | Role::Bishop => 300,
+        Role::Rook => 500,
+        Role::Queen => 900,
+        Role::King => 0,
+    };
+    let mut balance = 0;
+    for (_sq, piece) in pos.board().clone().into_iter() {
+        let v = value(piece.role);
+        balance += if piece.color.is_white() { v } else { -v };
+    }
+    balance
+}
+
+fn position_from_fen(fen: &str) -> Option<shakmaty::Chess> {
+    shakmaty::fen::Fen::from_ascii(fen.as_bytes())
+        .ok()?
+        .into_position(shakmaty::CastlingMode::Standard)
+        .ok()
+}
+
+fn material_balance(fen: &str) -> Option<i32> {
+    Some(board_material(&position_from_fen(fen)?))
+}
+
+/// Material the mover is left with after the opponent's best reply to `fen_after`.
+///
+/// The engine's reply is used rather than the one actually played: a sacrifice
+/// that the opponent *declined* is still a sacrifice, and this is also the only
+/// way to judge the final move of a game, where no reply was ever played.
+fn material_after_reply(fen_after: &str, reply_uci: &str, mover: Color) -> Option<i32> {
+    use shakmaty::{uci::UciMove, Position};
+    let pos = position_from_fen(fen_after)?;
+    let mv = reply_uci.parse::<UciMove>().ok()?.to_move(&pos).ok()?;
+    let settled = pos.play(mv).ok()?;
+    let balance = board_material(&settled);
+    Some(match mover {
+        Color::White => balance,
+        Color::Black => -balance,
+    })
+}
+
+/// Material from `mover`'s point of view.
+fn material_for(fen: &str, mover: Color) -> Option<i32> {
+    let balance = material_balance(fen)?;
+    Some(match mover {
+        Color::White => balance,
+        Color::Black => -balance,
+    })
+}
+
+/// Inputs the classifier needs beyond the played move's own evaluation.
+pub struct MoveContext {
+    /// Win-chance the mover gave up by not playing the engine's choice.
+    pub win_chance_loss: f64,
+    pub played_is_best: bool,
+    /// Win-chance gap between the engine's best and second-best move. A large
+    /// gap means there was only one move worth playing. `None` when a second
+    /// line wasn't available (e.g. only one legal move).
+    pub best_to_second: Option<f64>,
+    /// Mover's material, in centipawns, once the dust settles a couple of plies
+    /// on. Negative delta versus before the move means material was given up.
+    pub material_delta: Option<i32>,
+    /// Position is still comfortable for the mover after the move.
+    pub still_sound: bool,
+}
+
+/// A move counts as "only move" territory when every alternative is materially
+/// worse. 10 win-chance points is the same cut En Croissant uses.
+const ONLY_MOVE_GAP: f64 = 10.0;
+/// Giving up at least this much material (a knight for a pawn, say) is a
+/// sacrifice rather than an exchange or a pawn grab.
+const SACRIFICE_CP: i32 = 150;
+
+fn classify(ctx: &MoveContext) -> Severity {
+    if ctx.played_is_best {
+        let only_move = ctx.best_to_second.is_some_and(|gap| gap > ONLY_MOVE_GAP);
+        let sacrificed = ctx.material_delta.is_some_and(|d| d <= -SACRIFICE_CP);
+        if only_move && sacrificed && ctx.still_sound {
+            return Severity::Brilliant;
+        }
+        if only_move {
+            return Severity::Great;
+        }
+        return Severity::Best;
+    }
+    match ctx.win_chance_loss {
+        l if l >= 20.0 => Severity::Blunder,
+        l if l >= 10.0 => Severity::Mistake,
+        l if l >= 5.0 => Severity::Inaccuracy,
+        l if l >= 2.0 => Severity::Good,
+        _ => Severity::Excellent,
+    }
 }
 
 /// Analysis of a single move within a game.
@@ -356,17 +533,6 @@ fn negate(s: Score) -> Score {
     }
 }
 
-fn classify(cp_loss: i32, played_is_best: bool) -> Severity {
-    if played_is_best {
-        return Severity::Best;
-    }
-    match cp_loss {
-        l if l >= 300 => Severity::Blunder,
-        l if l >= 150 => Severity::Mistake,
-        l if l >= 50 => Severity::Inaccuracy,
-        _ => Severity::Good,
-    }
-}
 
 impl UciEngine {
     /// Analyze every move of a game's mainline at a fixed `depth`, classifying
@@ -387,9 +553,14 @@ impl UciEngine {
         }
 
         // Positions before each move are non-terminal (a move was played there).
+        // Two lines per position: the second is what distinguishes a move that was
+        // the only option from one of several equally good ones.
         let mut evals: Vec<EngineEval> = Vec::with_capacity(n);
+        let mut seconds: Vec<Option<Score>> = Vec::with_capacity(n);
         for step in &game.steps {
-            evals.push(self.analyze_position(&step.fen_before, depth)?);
+            let lines = self.analyze_position_multi(&step.fen_before, depth, 2)?;
+            seconds.push(lines.get(1).map(|e| e.score));
+            evals.push(lines.into_iter().next().ok_or(EngineError::NoEval)?);
         }
         // The final position may be checkmate/stalemate (no eval) — tolerate it.
         let final_eval = self.analyze_position(&game.final_fen, depth).ok();
@@ -423,7 +594,33 @@ impl UciEngine {
                 game.final_fen.clone()
             };
 
-            let severity = classify(cp_loss, played_is_best);
+            // Did this move give material away? Measured after the opponent's
+            // best reply, so an even trade nets out and a declined sacrifice
+            // still counts as one. Works on the final move of a game too, where
+            // no reply was ever played.
+            let material_delta = match (
+                material_for(&step.fen_before, step.side_to_move),
+                next.and_then(|ne| ne.best_move())
+                    .and_then(|reply| material_after_reply(&fen_after, reply, step.side_to_move)),
+            ) {
+                (Some(before_mat), Some(after_mat)) => Some(after_mat - before_mat),
+                _ => None,
+            };
+
+            let ctx = MoveContext {
+                win_chance_loss: (win_chance(score_cp(before.score))
+                    - win_chance(score_cp(eval_after)))
+                .max(0.0),
+                played_is_best,
+                best_to_second: seconds[i].map(|second| {
+                    (win_chance(score_cp(before.score)) - win_chance(score_cp(second))).max(0.0)
+                }),
+                material_delta,
+                // A brilliancy has to actually work — sacrificing into a lost
+                // position is just a blunder that the engine happens to prefer.
+                still_sound: score_cp(eval_after) > -200,
+            };
+            let severity = classify(&ctx);
             let is_error = matches!(severity, Severity::Mistake | Severity::Blunder);
             // Classify the *why* — and keep the recommended line — only when the
             // move actually went wrong.
@@ -467,6 +664,122 @@ impl UciEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Baseline context: best move played, nothing special about it.
+    fn ctx() -> MoveContext {
+        MoveContext {
+            win_chance_loss: 0.0,
+            played_is_best: true,
+            best_to_second: None,
+            material_delta: None,
+            still_sound: true,
+        }
+    }
+
+    #[test]
+    fn win_chance_is_centred_and_monotonic() {
+        assert!((win_chance(0) - 50.0).abs() < 0.001, "equal position is 50%");
+        assert!(win_chance(300) > win_chance(100));
+        assert!(win_chance(-300) < win_chance(-100));
+        // Symmetric about zero.
+        assert!((win_chance(250) + win_chance(-250) - 100.0).abs() < 0.001);
+        // Saturates rather than exploding on mate scores.
+        assert!(win_chance(100_000) <= 100.0 && win_chance(-100_000) >= 0.0);
+    }
+
+    #[test]
+    fn win_chance_loss_matters_more_when_the_game_is_close() {
+        // The same 100cp swing costs far more win chance near equality than it
+        // does when already winning — the reason the thresholds use win chance.
+        let near_equal = win_chance(0) - win_chance(-100);
+        let already_winning = win_chance(800) - win_chance(700);
+        assert!(
+            near_equal > already_winning * 2.0,
+            "100cp near equality ({near_equal}) should dwarf 100cp when winning ({already_winning})"
+        );
+    }
+
+    #[test]
+    fn material_balance_counts_both_sides() {
+        let start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+        assert_eq!(material_balance(start), Some(0));
+        // White is a knight up (black's b8 knight removed).
+        let a_knight_up = "r1bqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+        assert_eq!(material_balance(a_knight_up), Some(300));
+        // Same position from black's point of view.
+        assert_eq!(material_for(a_knight_up, Color::White), Some(300));
+        assert_eq!(material_for(a_knight_up, Color::Black), Some(-300));
+        assert_eq!(material_balance("not a fen"), None);
+    }
+
+    #[test]
+    fn best_move_without_alternatives_is_just_best() {
+        // No second line, or a close one: nothing remarkable.
+        assert_eq!(classify(&ctx()), Severity::Best);
+        assert_eq!(
+            classify(&MoveContext { best_to_second: Some(1.0), ..ctx() }),
+            Severity::Best
+        );
+    }
+
+    #[test]
+    fn only_move_is_great_and_sacrificing_only_move_is_brilliant() {
+        let only = MoveContext { best_to_second: Some(25.0), ..ctx() };
+        assert_eq!(classify(&only), Severity::Great);
+
+        let sacrifice = MoveContext { material_delta: Some(-300), ..only };
+        assert_eq!(classify(&sacrifice), Severity::Brilliant);
+
+        // An even trade is not a sacrifice.
+        assert_eq!(
+            classify(&MoveContext { material_delta: Some(0), ..only }),
+            Severity::Great
+        );
+        // Winning material is certainly not.
+        assert_eq!(
+            classify(&MoveContext { material_delta: Some(300), ..only }),
+            Severity::Great
+        );
+    }
+
+    #[test]
+    fn a_sacrifice_into_a_lost_position_is_not_brilliant() {
+        // The engine may still rank it first among bad options; that does not
+        // make it a brilliancy.
+        let doomed = MoveContext {
+            best_to_second: Some(25.0),
+            material_delta: Some(-500),
+            still_sound: false,
+            ..ctx()
+        };
+        assert_eq!(classify(&doomed), Severity::Great);
+    }
+
+    #[test]
+    fn errors_are_graded_by_win_chance_lost() {
+        let err = |loss: f64| {
+            classify(&MoveContext { win_chance_loss: loss, played_is_best: false, ..ctx() })
+        };
+        assert_eq!(err(0.5), Severity::Excellent);
+        assert_eq!(err(3.0), Severity::Good);
+        assert_eq!(err(7.0), Severity::Inaccuracy);
+        assert_eq!(err(15.0), Severity::Mistake);
+        assert_eq!(err(40.0), Severity::Blunder);
+        // Boundaries land on the worse side.
+        assert_eq!(err(2.0), Severity::Good);
+        assert_eq!(err(5.0), Severity::Inaccuracy);
+        assert_eq!(err(10.0), Severity::Mistake);
+        assert_eq!(err(20.0), Severity::Blunder);
+    }
+
+    #[test]
+    fn parses_multipv_rank_and_defaults_to_one() {
+        let second = parse_info("info depth 20 multipv 2 score cp -14 pv d2d4 d7d5").unwrap();
+        assert_eq!(second.multipv, 2);
+        // A single-line search omits multipv entirely.
+        let only = parse_info("info depth 20 score cp 31 pv e2e4").unwrap();
+        assert_eq!(only.multipv, 1);
+    }
 
     #[test]
     fn arch_score_prefers_native_build() {

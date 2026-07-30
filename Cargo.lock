@@ -704,9 +704,9 @@ dependencies = [
 
 [[package]]
 name = "dbkit-rs"
-version = "0.5.2"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b6ec0bcd41ed551575a5b75655e5c4670d211aa386d6315741c643a3b0ecab2"
+checksum = "9bd642cc0b32f56d2ba837b90d200f74bfc9a4ea9ab416037195112823c0e29d"
 dependencies = [
  "dashmap",
  "percent-encoding",

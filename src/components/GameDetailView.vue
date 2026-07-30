@@ -286,10 +286,26 @@ watch(selected, () => {
 const barPct = computed(() => (current.value ? whiteBarPct(current.value) : 50));
 const evalText = computed(() => (current.value ? evalLabel(current.value) : '0.0'));
 
+// Standard chess glyphs per move quality. `best`/`excellent`/`good` are left
+// unmarked on purpose — annotating every quiet move makes the movelist unreadable.
 const annotation: Record<string, string> = {
+  brilliant: '!!',
+  great: '!',
   inaccuracy: '?!',
   mistake: '?',
   blunder: '??',
+};
+
+/** Hover text explaining what each glyph means. */
+const severityLabel: Record<string, string> = {
+  brilliant: 'Brilliant — the only move, and it gives up material',
+  great: 'Great move — the only move that held the position',
+  best: "Best — the engine's first choice",
+  excellent: 'Excellent — gives up almost nothing',
+  good: 'Good',
+  inaccuracy: 'Inaccuracy',
+  mistake: 'Mistake',
+  blunder: 'Blunder',
 };
 
 const outcomeLabel: Record<string, string> = {
@@ -434,6 +450,7 @@ const movePairs = computed<MoveRow[]>(() => {
                 v-if="row.white"
                 class="ply"
                 :class="[row.white.severity, { selected: selected === row.whiteIdx }]"
+                :title="severityLabel[row.white.severity]"
                 @click="selected = row.whiteIdx!"
               >
                 {{ row.white.san
@@ -451,6 +468,7 @@ const movePairs = computed<MoveRow[]>(() => {
                 v-if="row.black"
                 class="ply"
                 :class="[row.black.severity, { selected: selected === row.blackIdx }]"
+                :title="severityLabel[row.black.severity]"
                 @click="selected = row.blackIdx!"
               >
                 {{ row.black.san
@@ -704,6 +722,16 @@ const movePairs = computed<MoveRow[]>(() => {
   margin-left: 2px;
 }
 
+/* Good moves in cool colours, errors in warm ones, so the movelist reads at a
+   glance without having to parse the glyphs. */
+.ply.brilliant .annot {
+  color: #26c6da;
+}
+
+.ply.great .annot {
+  color: #4d9fff;
+}
+
 .ply.inaccuracy .annot {
   color: #e0c200;
 }
@@ -714,6 +742,16 @@ const movePairs = computed<MoveRow[]>(() => {
 
 .ply.blunder .annot {
   color: #ff5050;
+}
+
+/* Brilliancies are rare enough to be worth spotting in the movelist itself. */
+.ply.brilliant {
+  color: #26c6da;
+  font-weight: 700;
+}
+
+.ply.great {
+  color: #4d9fff;
 }
 
 .concept-mark {

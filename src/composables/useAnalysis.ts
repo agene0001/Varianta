@@ -3,7 +3,16 @@ import { invoke } from "@tauri-apps/api/core";
 const inTauri =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
-export type Severity = "best" | "good" | "inaccuracy" | "mistake" | "blunder";
+/** Mirrors `gambit_engine::Severity`, ordered best-to-worst. */
+export type Severity =
+  | "brilliant"
+  | "great"
+  | "best"
+  | "excellent"
+  | "good"
+  | "inaccuracy"
+  | "mistake"
+  | "blunder";
 export type Score = { kind: "cp"; value: number } | { kind: "mate"; value: number };
 
 /** Tactical themes a mistake can be tagged with (mirrors `gambit_engine::Concept`). */

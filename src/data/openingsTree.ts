@@ -1795,7 +1795,7 @@ const petrovTree: TreeMove[] = [
                                       { san: "d3", description: "White attacks your knight with d3 — the natural move, and a losing one." },
                                       { san: "Bc5", description: "White played d3 attacking your knight — IGNORE IT. Bc5! is the Stafford's signature trap: if White grabs with 7.dxe4?? then 7...Bxf2+ 8.Ke2 Bg4+ skewers the king and queen and wins the queen outright." },
                                       { san: "Qh5", description: "White finds the only real try, Qh5, defending f2 and hitting f7." },
-                                      { san: "Nxf2", description: "White played Qh5. Take on f2 anyway! The knight is immune and White's king is stuck in the center." },
+                                      { san: "Nxf2", description: "White played Qh5. Take with Nxf2 anyway! The knight is immune and White's king is stuck in the center." },
                                       { san: "e6", description: "White counter-attacks with e6, trying to blast open f7." },
                                       { san: "Qe7", description: "White played e6. Calmly defend with Qe7 — you keep the extra piece and White's attack runs dry." },
                                       { san: "Qxf7+", description: "White forces the queens off with Qxf7+." },
