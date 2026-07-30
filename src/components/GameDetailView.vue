@@ -16,7 +16,7 @@ import {
   isError,
   type MoveAnalysis,
 } from '../composables/useAnalysis';
-import { loadLichessOpenings } from '../services/lichessOpenings';
+import { loadBookPositions, positionKey } from '../services/lichessOpenings';
 
 const props = defineProps<{ game: Game }>();
 const emit = defineEmits<{ (e: 'back'): void }>();
@@ -346,14 +346,22 @@ watch(
   async (list) => {
     bookPlies.value = 0;
     if (!list?.length) return;
-    const played = list.map((m) => m.san);
-    const openings = await loadLichessOpenings();
-    let longest = 0;
-    for (const o of openings) {
-      if (o.m.length <= longest || o.m.length > played.length) continue;
-      if (o.m.every((san, i) => san === played[i])) longest = o.m.length;
+    // Matched by resulting position rather than by move sequence, so a line
+    // reached in an unusual order still counts as theory — 1.d4 e6 2.e4 d5 is
+    // the same French as 1.e4 e6 2.d4 d5, and sequence matching missed it.
+    const book = await loadBookPositions();
+    const chess = new Chess();
+    let plies = 0;
+    for (const m of list) {
+      try {
+        chess.move(m.san);
+      } catch {
+        break;
+      }
+      if (!book.has(positionKey(chess.fen()))) break;
+      plies++;
     }
-    bookPlies.value = longest;
+    bookPlies.value = plies;
   },
   { immediate: true },
 );
