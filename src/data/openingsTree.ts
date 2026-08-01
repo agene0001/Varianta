@@ -569,13 +569,13 @@ const ruyLopezTree: TreeMove[] = [
                                 variations: line(
                                   { san: "Bxc6", description: "Black played a6. Take on c6 straight away! It looks like conceding the bishop pair, but it strips e5 of its defender: after ...dxc6 the d-pawn is gone from d6 and nothing guards e5." },
                                   { san: "dxc6", description: "Black recaptures with the d-pawn (81% here), doubling the c-pawns." },
-                                  { san: "Nxe5", description: "Black played dxe6. Now Nxe5 is simply a free pawn — e5 has one attacker and zero defenders. The engine has this at +1.3 against +0.2 for anything quiet." },
+                                  { san: "Nxe5", description: "Black played dxc6. Now Nxe5 is simply a free pawn — e5 has one attacker and zero defenders. The engine has this at +1.3 against +0.2 for anything quiet." },
                                   { san: "Bd6", description: "Black develops the bishop to d6, hitting your knight." },
                                   { san: "Nf3", description: "Black played Bd6. Retreat the knight to f3 — no need to hold e5, you already banked the pawn." },
                                   { san: "Bg4", description: "Black pins the knight with Bg4." },
                                   { san: "e5", description: "Black played Bg4. Push e5! It hits the d6 bishop and breaks the pin's point in one move." },
                                   { san: "Bxe5", description: "Black takes the pawn with the bishop." },
-                                  { san: "Re1", description: "Black played Bxe5. Bring the rook to e1, skewering the bishop on the open file. You're a pawn up with the initiative." },
+                                  { san: "Re1", description: "Black played Bxe5. Bring the rook to e1, pinning the bishop against the king on the open file — it has no legal moves, is attacked twice and defended by nothing, so it simply falls. Material is even for one more move; once you collect the bishop you are winning (+3.3)." },
                                 ),
                               },
                               {
@@ -874,7 +874,7 @@ const ruyLopezTree: TreeMove[] = [
                   { san: "Qc8", description: "Black defends both targets with the awkward Qc8." },
                   { san: "Ng5", description: "Black played Qc8. Pile on e6 with Ng5 — Black's pieces are all tangled defending it." },
                   { san: "Ke7", description: "Black's king has to step up to e7 to hold e6 together." },
-                  { san: "Nxc3", description: "Black played Ke7. Collect the gambit pawn back with Nxc3. Count the position: material is even apart from one pawn, but Black's king is on e7 in the middlegame — +2.3." },
+                  { san: "Nxc3", description: "Black played Ke7. Collect the gambit pawn back with Nxc3. Count the position: you are still a pawn down, but Black's king is stuck on e7 in the middlegame — +2.3 all the same." },
                 ),
               },
               {
@@ -2130,7 +2130,7 @@ const petrovTree: TreeMove[] = [
                                       { san: "Qxf7+", description: "White forces the queens off with Qxf7+." },
                                       { san: "Qxf7", description: "White played Qxf7+. Recapture with the queen." },
                                       { san: "exf7+", description: "White recaptures with check." },
-                                      { san: "Kxf7", description: "White played exf7+. Take with the king. Queens are off, you're a clean piece up (about +3.3) with a safe king — completely winning." },
+                                      { san: "Kxf7", description: "White played exf7+. Take with the king. Queens are off and material is dead even for the moment — but your knight on f2 collects the h1 rook in almost every line, and even against White's best (d4) the engine has you about +4. Completely winning with a safe king." },
                                     ),
                                   },
                                   // ── 5.Nc3 ──
