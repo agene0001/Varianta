@@ -414,9 +414,9 @@ const ruyLopezTree: TreeMove[] = [
                           { san: "exd4", description: "Black captures on d4 — and note this is the move that dooms the position: the d-pawn has left d6 for good." },
                           { san: "e5", description: "Black played exd4. Now e5!! forking the d6 bishop and the f6 knight. Every reply loses at least a piece — Stockfish has Black at -3.1 for the best try and -4.5 for the worst — because with the d-pawn on d4 there is nothing left to defend e5, and Re1 collects whatever recaptures there." },
                           { san: "Nxe5", description: "Black takes with the knight, the least bad option." },
-                          { san: "Nxe5", description: "Black played Nxe5. Recapture — Nxe5. Black cannot take back: nothing defends the square." },
-                          { san: "a6", description: "Black plays a6, unable to regain the piece." },
-                          { san: "Re1", description: "Black played a6. Rook to e1, owning the open file. You are a clean piece up." },
+                          { san: "Nxe5", description: "Black played Nxe5. Recapture — Nxe5. Black CAN take again with the d6 bishop, but it loses to a pin, not a lack of defenders: after ...Bxe5, Re1 leaves the bishop with no legal moves at all — pinned to the king, attacked once, defended by nothing. Castling unpins but just drops it to Rxe5 (-3.5); defending with ...Qe7 walks into f4!, when the bishop has to step off the file and Rxe7+ wins the queen instead (-3.7)." },
+                          { san: "a6", description: "Black's best try (-3.0): hitting your b5 bishop rather than recapturing on e5." },
+                          { san: "Re1", description: "Black played a6, attacking your bishop — ignore it! Re1 seizes the e-file, and the b5 bishop is poisoned: ...axb5?? loses to Nc6+!, a discovered check from this rook while the knight forks the d8 queen — ...Be7 Nxd8 wins queen for bishop (+5.6). To be precise, you are only a pawn up in material here, but at +3.0 the position is winning: Black's king is stuck on the open file you now own." },
                         ),
                       },
                       {
