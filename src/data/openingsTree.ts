@@ -433,8 +433,11 @@ const ruyLopezTree: TreeMove[] = [
                           { san: "b5", description: "Black gains space with b5." },
                           { san: "Bb3", description: "Black played b5. Step back to b3, eyeing f7 and the a2–g8 diagonal." },
                           { san: "d6", description: "Black solidifies with d6." },
-                          { san: "Nd5", description: "Black played d6. Nd5! The knight lands on the square Black's own queen took away from the f6 knight — a permanent outpost hitting the queen and c7." },
-                          { san: "Nxd5", description: "Black trades on d5. You're clearly better with a lead in development and an exposed black queen." },
+                          { san: "Nd5", description: "Black played d6. Nd5! — best by a distance (+2.0, against +1.1 for anything else). It is not an outpost: the e7 knight guards d5 and will take it next move. It is a forcing trade. From d5 the knight attacks the f6 queen, the e7 knight and c7 all at once, and declining costs Black at least three pawns — 8...Qg6 9.Nxc7+ is check with the a8 rook hanging (Black's only replies are Kd7 and Kd8, then Nxa8)." },
+                          { san: "Nxd5", description: "Black has to take: every alternative runs -4.7 or worse." },
+                          { san: "Bxd5", description: "Black played Nxd5. Recapture with the BISHOP, not the pawn — this is the whole point of the line. Bxd5 keeps +1.8; the natural exd5 collapses to +0.3. Two concrete reasons: the bishop hits f7 as well as c6 (a pawn on d5 only hits c6), and taking with the bishop keeps your pawn on e4, so you still own the centre instead of trading it away." },
+                          { san: "Bd7", description: "Black defends the c6 knight with Bd7." },
+                          { san: "d4", description: "Black played Bd7. Open the centre with d4 while Black's queen is still awkward on f6 and the king has not castled. About +1.8 with much the freer game." },
                         ),
                       },
                       {
